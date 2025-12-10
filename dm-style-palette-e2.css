@@ -1,0 +1,243 @@
+
+/* ============================================================
+   DREADMARCH VIEWER 4.0 — PALETTE E2
+   Phase H-RESET — Canonical Holotable Palette
+   ------------------------------------------------------------
+   - Palette E2 route/grid/system colors
+   - Text role variables + classes (DM4 style contract)
+   - Dataset selector styling
+   - Phase H-RESET holotable shell + mapwell
+   ============================================================ */
+
+/* ------------------------------------------------------------------
+ * 1. CORE MAP PALETTE + TYPE SCALE  (Palette E2, unchanged behavior)
+ * ------------------------------------------------------------------*/
+
+:root {
+  /* Route + grid palette */
+  --route-major-color: #f05050;
+  --route-medium-color: #d23232;
+  --route-minor-color: #a84040;
+  --route-major-width: 2.5;
+  --route-medium-width: 1.7;
+  --route-minor-width: 1;
+
+  --system-fill-color: #cd3e3e;
+  --system-stroke-color: #000000;
+  --label-color: #e6d2c8;
+  --dm-system-label-selected-color: var(--selection-color, #e46b24);
+
+  --grid-major-color: rgba(130,130,150,0.75);
+  --grid-minor-color: rgba(70,70,80,0.4);
+  --grid-major-width: 1.4;
+  --grid-minor-width: 1;
+  --minor-dasharray: 12 12;
+
+  /* Data text type scale (Identity/NavCom/etc.) */
+  --dm-font-large: 1.00rem;  /* system name / SYSTEM READOUT */
+  --dm-font-medium: 0.75rem; /* section headers */
+  --dm-font-small: 0.50rem;  /* registry/grid/local + route info */
+  --dm-system-label-font: 1.50rem;
+
+  /* Sidebar text color roles — Palette E2: Crimson Sith */
+  --dm-color-title:    #e23a3a;
+  --dm-color-header:   #e23a3a;
+  --dm-color-body:     #c9b0b5;
+  --dm-color-emphasis: #ff1a1a;
+  --dm-color-muted:    #7a5454;
+  --dm-crimson-accent: #e23a3a;
+
+  /* System label CRT bloom tiers */
+  --sysLabelGlowBase:
+    drop-shadow(0 0 4px rgba(255, 80, 80, 0.25))
+    drop-shadow(0 0 8px rgba(255, 40, 40, 0.33));
+
+  --sysLabelGlowSelected:
+    drop-shadow(0 0 3px rgba(255, 120, 120, 0.5))
+    drop-shadow(0 0 10px rgba(255, 80, 80, 0.75));
+
+  --dm-system-label-font-weight: 600;
+
+  /* Text role colors wired into DM4 style contract */
+  --dm-text-title-color:  var(--dm-crimson-accent);
+  --dm-text-header-color: var(--dm-crimson-accent);
+  --dm-text-body-color:   var(--dm-color-body);
+}
+
+/* ImperialCode Aurebesh-style display family (scaffolding) */
+@font-face {
+  font-family: "ImperialCode";
+  src: url("ImperialCode-VGXpx.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "ImperialCode";
+  src: url("ImperialCodeItalic-JRY9o.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "ImperialCode";
+  src: url("ImperialCode2-qZrad.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
+
+:root {
+  --dm-font-aurebesh-display: "ImperialCode", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --dm-font-aurebesh-italic: "ImperialCode", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ------------------------------------------------------------------
+ * 2. TEXT ROLE CLASSES  (DM4 style contract)
+ * ------------------------------------------------------------------*/
+
+.dm-text-title  { color: var(--dm-text-title-color); }
+.dm-text-header { color: var(--dm-text-header-color); }
+.dm-text-body   { color: var(--dm-text-body-color); }
+
+/* Dataset selector in the top bar */
+.dm-top-bar-datasets {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dm-top-bar-datasets > span {
+  margin-right: 0.25rem;
+}
+
+.dm-top-bar-dataset-select {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--dm-text-body-color, #f3f3f3);
+  padding: 0.15rem 0.4rem;
+  font-size: var(--dm-font-small);
+}
+
+/* ------------------------------------------------------------------
+ * 3. PHASE H-RESET — HOLOTABLE SHELL + MAPWELL (CANONICAL)
+ * ------------------------------------------------------------------*/
+
+:root {
+  /* Holotable shell */
+  --dm-shell-bg-outer: radial-gradient(circle at top, #050106 0%, #060108 40%, #000 100%);
+  --dm-shell-bg-inner: radial-gradient(circle at 50% 0%, #130108 0%, #050109 40%, #010004 100%);
+
+  --dm-shell-border-color: rgba(255, 96, 96, 0.98);  /* brightest, cold crimson */
+  --dm-shell-radius: 16px;
+  --dm-shell-shadow:
+      0 0 0 1px rgba(255, 96, 96, 0.65),
+      0 0 30px rgba(0, 0, 0, 0.95),
+      0 0 40px rgba(255, 72, 72, 0.45);
+
+  /* Mapwell geometry */
+  --dm-mapwell-radius: 18px;
+  --dm-mapwell-margin: 8px;  /* thin opaque sidewall band */
+
+  --dm-mapwell-sidewall-bg: #050209;
+
+  /* Display plate */
+  --dm-map-plate-bg: radial-gradient(
+    circle at 50% 42%,
+    rgba(255, 80, 80, 0.08) 0%,
+    #07020b 52%,
+    #020006 100%
+  );
+
+  /* Inner frame slightly darker than shell */
+  --dm-map-plate-border-color: rgba(255, 70, 70, 0.88);
+  --dm-map-plate-border-soft:  rgba(255, 50, 50, 0.50);
+
+  /* Central glow + vignette strength */
+  --dm-map-plate-inner-shadow: inset 0 0 16px rgba(0, 0, 0, 0.90);
+  --dm-map-plate-vignette-opacity: 0.40;
+}
+
+/* Page background: viewport-locked, no external scroll */
+.dm4-page-bg {
+  margin: 0;
+  height: 100vh;
+  min-height: 100vh;
+  max-height: 100vh;
+  padding: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dm-shell-bg-outer);
+  color: var(--dm-text-body-color);
+}
+
+/* Holotable shell — slightly inset vertically so top/bottom are visible */
+.dm4-root-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
+  width: 100%;
+  max-width: 1280px;
+  height: 94%;
+  max-height: 94%;
+  padding: 10px 12px 14px;
+  background: var(--dm-shell-bg-inner);
+  border-radius: var(--dm-shell-radius);
+  border: 1px solid var(--dm-shell-border-color);
+  box-shadow: var(--dm-shell-shadow);
+  overflow: hidden;
+}
+
+/* Central projection chamber: opaque sidewall band */
+.dm-col-center {
+  background: var(--dm-mapwell-sidewall-bg) !important;
+  border-radius: var(--dm-mapwell-radius) !important;
+  box-shadow:
+    inset 0 0 18px rgba(0, 0, 0, 0.94),
+    0 0 0 1px rgba(255, 60, 80, 0.18);
+  overflow: hidden !important;  /* ensures no square corners leak */
+}
+
+/* Display plate with single luminous inner frame */
+.dm-map-container {
+  position: absolute;
+  inset: var(--dm-mapwell-margin) !important;
+  border-radius: calc(var(--dm-mapwell-radius) - 6px);
+  background: var(--dm-map-plate-bg);
+  border: 2px solid var(--dm-map-plate-border-color);
+  box-shadow: var(--dm-map-plate-inner-shadow);
+  overflow: hidden;
+}
+
+/* No extra inner ring — single frame only */
+.dm-map-container::before {
+  content: none;
+}
+
+/* Soft center glow + edge vignette */
+.dm-map-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(255, 90, 80, 0.07) 0%,
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      transparent 0%,
+      transparent 78%,
+      rgba(0, 0, 0, 0.95) 100%
+    );
+  opacity: var(--dm-map-plate-vignette-opacity);
+}

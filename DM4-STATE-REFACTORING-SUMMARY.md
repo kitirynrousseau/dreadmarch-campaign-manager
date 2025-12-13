@@ -214,10 +214,23 @@ actions.selectSystem('sys-2');     // Triggered once (batched)
 ## Future Enhancements
 
 Potential improvements for future consideration:
+
+### High Priority
 1. **Nested Scopes**: Support subscribing to deeply nested paths (e.g., `['dataset', 'systems', 'system-1']`)
-2. **Configurable Batch Delay**: Allow custom batch timeout values
-3. **Subscription Priorities**: Allow subscribers to specify priority for notification order
-4. **State Diffing**: Only notify if the subscribed portion of state actually changed
+   - Note: Current implementation uses dot (`.`) as delimiter, which would conflict with scope names containing dots
+   - Recommendation: Use a different delimiter (e.g., `\x00`) or JSON serialization for deeply nested scopes
+
+2. **Performance Optimization**: The current batching algorithm has O(n*m) complexity where n = number of unique scopes and m = number of subscribers
+   - Current implementation is acceptable for typical use cases (< 100 subscribers, 1-3 scopes per batch)
+   - For large-scale applications, consider:
+     - Indexing subscribers by scope path for O(1) lookup
+     - Using a Map instead of nested loops
+     - Pre-computing scope matches
+
+### Lower Priority
+3. **Configurable Batch Delay**: Allow custom batch timeout values
+4. **Subscription Priorities**: Allow subscribers to specify priority for notification order
+5. **State Diffing**: Only notify if the subscribed portion of state actually changed
 
 ## Conclusion
 

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DM4 State Manager Tests</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff00;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 10px;
+      border: 1px solid #00ff00;
+    }
+    .test-result {
+      padding: 5px;
+      margin: 5px 0;
+    }
+    .pass { color: #00ff00; }
+    .fail { color: #ff0000; }
+    h2 { color: #ffff00; }
+  </style>
+</head>
+<body>
+  <h1>DM4 State Manager Tests</h1>
+  <div id="test-results"></div>
+
+  <script>
+    // Initialize DM4 namespace
+    window.DM4 = window.DM4 || {};
+    window.DM4.config = { debug: true };
+    window.DM4.state = {};
+  </script>
+
+  <!-- Load the state manager -->
+  <script src="dm4-state.js"></script>
+
+  <script>
+    const resultsDiv = document.getElementById('test-results');
+    
+    function log(message, isPass) {
+      const div = document.createElement('div');
+      div.className = 'test-result ' + (isPass ? 'pass' : 'fail');
+      div.textContent = (isPass ? '✓ ' : '✗ ') + message;
+      resultsDiv.appendChild(div);
+    }
+
+    function addSection(title) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      const h2 = document.createElement('h2');
+      h2.textContent = title;
+      section.appendChild(h2);
+      resultsDiv.appendChild(section);
+      return section;
+    }
+
+    // Test 1: Basic subscription without scope
+    (function testBasicSubscription() {
+      const section = addSection('Test 1: Basic Subscription (No Scope)');
+      
+      const stateManager = DM4.state.createStateManager({}, {}, {});
+      let callCount = 0;
+      
+      const unsubscribe = stateManager.subscribe(function(state) {
+        callCount++;
+      });
+      
+      // Should be called once immediately
+      log('Initial call on subscribe: ' + (callCount === 1), callCount === 1);
+      
+      stateManager.actions.setMode('strategic');
+      
+      // Wait for batch to process
+      setTimeout(function() {
+        log('Called after setMode: ' + (callCount === 2), callCount === 2);
+        unsubscribe();
+      }, 50);
+    })();
+
+    // Test 2: Scoped subscription - only selection changes
+    setTimeout(function() {
+      const section = addSection('Test 2: Scoped Subscription (selection only)');
+      
+      const stateManager = DM4.state.createStateManager({}, {}, {});
+      let selectionCallCount = 0;
+      let modeCallCount = 0;
+      
+      // Subscribe only to selection changes
+      const unsubSelection = stateManager.subscribe(function(state) {
+        selectionCallCount++;
+      }, ['selection']);
+      
+      // Subscribe only to mode changes
+      const unsubMode = stateManager.subscribe(function(state) {
+        modeCallCount++;
+      }, ['mode']);
+      
+      // Initial calls
+      log('Selection subscriber called initially: ' + (selectionCallCount === 1), selectionCallCount === 1);
+      log('Mode subscriber called initially: ' + (modeCallCount === 1), modeCallCount === 1);
+      
+      // Change selection - should only trigger selection subscriber
+      stateManager.actions.selectSystem('system-1');
+      
+      setTimeout(function() {
+        log('Selection subscriber called after selectSystem: ' + (selectionCallCount === 2), selectionCallCount === 2);
+        log('Mode subscriber NOT called after selectSystem: ' + (modeCallCount === 1), modeCallCount === 1);
+        
+        // Change mode - should only trigger mode subscriber
+        stateManager.actions.setMode('strategic');
+        
+        setTimeout(function() {
+          log('Selection subscriber NOT called after setMode: ' + (selectionCallCount === 2), selectionCallCount === 2);
+          log('Mode subscriber called after setMode: ' + (modeCallCount === 2), modeCallCount === 2);
+          
+          unsubSelection();
+          unsubMode();
+        }, 50);
+      }, 50);
+    }, 100);
+
+    // Test 3: Batch notifications
+    setTimeout(function() {
+      const section = addSection('Test 3: Batch Notifications');
+      
+      const stateManager = DM4.state.createStateManager({}, {}, {});
+      let callCount = 0;
+      
+      const unsub = stateManager.subscribe(function(state) {
+        callCount++;
+      });
+      
+      // Initial call
+      const initialCount = callCount;
+      
+      // Multiple rapid changes
+      stateManager.actions.setMode('strategic');
+      stateManager.actions.selectSystem('system-1');
+      stateManager.actions.setMode('navcom');
+      
+      log('Calls batched during synchronous execution: ' + (callCount === initialCount), callCount === initialCount);
+      
+      setTimeout(function() {
+        // Should have batched the changes (1 initial + 1 batched notification)
+        // All changes are aggregated into a single notification per subscriber
+        log('Total calls after batch: ' + callCount + ' (expected 2)', callCount === 2);
+        unsub();
+      }, 50);
+    }, 300);
+
+    // Test 4: Dataset scope
+    setTimeout(function() {
+      const section = addSection('Test 4: Dataset Scoped Subscription');
+      
+      const stateManager = DM4.state.createStateManager({}, {}, {});
+      let datasetCallCount = 0;
+      let otherCallCount = 0;
+      
+      const unsubDataset = stateManager.subscribe(function(state) {
+        datasetCallCount++;
+      }, ['dataset']);
+      
+      const unsubOther = stateManager.subscribe(function(state) {
+        otherCallCount++;
+      }, ['mode']);
+      
+      // Set dataset
+      stateManager.actions.setDataset({ systems: { 'sys1': { name: 'Test' } } });
+      
+      setTimeout(function() {
+        log('Dataset subscriber called: ' + (datasetCallCount === 2), datasetCallCount === 2);
+        log('Mode subscriber NOT called: ' + (otherCallCount === 1), otherCallCount === 1);
+        
+        unsubDataset();
+        unsubOther();
+      }, 50);
+    }, 500);
+
+    // Test 5: Unsubscribe functionality
+    setTimeout(function() {
+      const section = addSection('Test 5: Unsubscribe');
+      
+      const stateManager = DM4.state.createStateManager({}, {}, {});
+      let callCount = 0;
+      
+      const unsub = stateManager.subscribe(function(state) {
+        callCount++;
+      });
+      
+      // Unsubscribe immediately
+      unsub();
+      
+      // Try to trigger update
+      stateManager.actions.setMode('strategic');
+      
+      setTimeout(function() {
+        log('No calls after unsubscribe: ' + (callCount === 1), callCount === 1);
+      }, 50);
+    }, 700);
+
+    // Test 6: Multiple subscribers to same scope
+    setTimeout(function() {
+      const section = addSection('Test 6: Multiple Subscribers to Same Scope');
+      
+      const stateManager = DM4.state.createStateManager({}, {}, {});
+      let calls1 = 0;
+      let calls2 = 0;
+      
+      const unsub1 = stateManager.subscribe(function(state) {
+        calls1++;
+      }, ['selection']);
+      
+      const unsub2 = stateManager.subscribe(function(state) {
+        calls2++;
+      }, ['selection']);
+      
+      stateManager.actions.selectSystem('system-1');
+      
+      setTimeout(function() {
+        log('First subscriber called: ' + (calls1 === 2), calls1 === 2);
+        log('Second subscriber called: ' + (calls2 === 2), calls2 === 2);
+        
+        unsub1();
+        unsub2();
+        
+        // Final summary
+        setTimeout(function() {
+          const summary = document.createElement('div');
+          summary.className = 'test-section';
+          summary.innerHTML = '<h2>Tests Complete!</h2><p>Check results above.</p>';
+          resultsDiv.appendChild(summary);
+        }, 100);
+      }, 50);
+    }, 900);
+  </script>
+</body>
+</html>

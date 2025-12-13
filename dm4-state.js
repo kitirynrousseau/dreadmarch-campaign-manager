@@ -12,6 +12,14 @@
 /***********************
    * 3) STATE MANAGER
    ***********************/
+  
+  // DM4_HELPER_FUNCTION: isKnownMode
+  const DM4_MODES = ["navcom", "strategic"];
+  
+  function isKnownMode(mode) {
+    return DM4_MODES.indexOf(mode) !== -1;
+  }
+
   // DM4_CORE_FUNCTION: createStateManager
   function createStateManager(config, dataset, campaign) {
     let subscribers = [];
@@ -55,23 +63,69 @@
       return state;
     }
 
-    // DM4_HELPER_FUNCTION: notifySubscribers
-
-    function notifySubscribers() {
-      const snapshot = state;
-      subscribers.forEach(function (fn) {
-        fn(snapshot);
+    // DM4_HELPER_FUNCTION: scopeApplies
+    // Checks if a subscriber's scope matches the changed scope
+    function scopeApplies(subscribedScope, changedScope) {
+      // Empty subscribedScope means subscribe to all changes
+      if (subscribedScope.length === 0) {
+        return true;
+      }
+      // Check if the changedScope starts with the subscribedScope
+      return subscribedScope.every(function (s, i) {
+        return s === changedScope[i];
       });
     }
 
-    // DM4_HELPER_FUNCTION: subscribe
+    // DM4_HELPER_FUNCTION: notifySubscribers
+    // Now accepts a changedScopePath to filter subscribers
+    function notifySubscribers(changedScopePath) {
+      changedScopePath = changedScopePath || [];
+      const snapshot = state;
+      subscribers.forEach(function (subscriber) {
+        if (scopeApplies(subscriber.scopePath, changedScopePath)) {
+          subscriber.fn(snapshot);
+        }
+      });
+    }
 
-    function subscribe(fn) {
-      subscribers.push(fn);
-      fn(state);
+    // Batching mechanism for notifications
+    let batchedChanges = new Set();
+    let notifyTimeout = null;
+
+    // DM4_HELPER_FUNCTION: batchNotify
+    // Queues a scope change and delays notification to batch multiple updates
+    function batchNotify(changeScope) {
+      changeScope = changeScope || [];
+      // Store scope as a string to enable Set deduplication
+      const scopeKey = JSON.stringify(changeScope);
+      batchedChanges.add(scopeKey);
+      
+      if (!notifyTimeout) {
+        notifyTimeout = setTimeout(function () {
+          // Process all batched changes
+          const scopes = Array.from(batchedChanges).map(function (key) {
+            return JSON.parse(key);
+          });
+          batchedChanges.clear();
+          notifyTimeout = null;
+          
+          // Notify subscribers for each unique scope
+          scopes.forEach(function (scope) {
+            notifySubscribers(scope);
+          });
+        }, 10); // 10ms delay for batching
+      }
+    }
+
+    // DM4_HELPER_FUNCTION: subscribe
+    // Now accepts an optional scopePath parameter
+    function subscribe(fn, scopePath) {
+      scopePath = scopePath || [];
+      subscribers.push({ fn: fn, scopePath: scopePath });
+      fn(state); // Immediate snapshot on subscribe
       return function () {
         subscribers = subscribers.filter(function (s) {
-          return s !== fn;
+          return s.fn !== fn;
         });
       };
     }
@@ -83,7 +137,7 @@
             system: systemId
           })
         });
-        notifySubscribers();
+        batchNotify(['selection']);
       },
 
       setMode: function (mode) {
@@ -94,28 +148,28 @@
           return;
         }
         state = Object.assign({}, state, { mode: mode });
-        notifySubscribers();
+        batchNotify(['mode']);
       },
 
       setDataset: function (newDataset) {
         state = Object.assign({}, state, {
           dataset: newDataset || { systems: {} }
         });
-        notifySubscribers();
+        batchNotify(['dataset']);
       },
 
       setCampaign: function (newCampaign) {
         state = Object.assign({}, state, {
           campaign: newCampaign || state.campaign
         });
-        notifySubscribers();
+        batchNotify(['campaign']);
       },
 
       setAccess: function (partial) {
         state = Object.assign({}, state, {
           access: Object.assign({}, state.access, partial)
         });
-        notifySubscribers();
+        batchNotify(['access']);
       },
 
       setEditorEnabled: function (enabled) {
@@ -123,7 +177,7 @@
         state = Object.assign({}, state, {
           editor: Object.assign({}, current, { enabled: !!enabled })
         });
-        notifySubscribers();
+        batchNotify(['editor']);
       },
 
       addEditorJob: function (job) {
@@ -132,7 +186,7 @@
         state = Object.assign({}, state, {
           editor: Object.assign({}, current, { jobs: jobs })
         });
-        notifySubscribers();
+        batchNotify(['editor']);
       },
 
       clearEditorJobs: function () {
@@ -140,7 +194,7 @@
         state = Object.assign({}, state, {
           editor: Object.assign({}, current, { jobs: [] })
         });
-        notifySubscribers();
+        batchNotify(['editor']);
       }
     };
 

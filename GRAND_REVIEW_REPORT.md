@@ -67,7 +67,11 @@ This document provides a comprehensive review of the `Dreadmarch Campaign Manage
 
 ### 1. **State Management Improvements**
 - **Issue**: `state.subscribe` updates all components indiscriminately.
-- **Recommendation**: Introduce scoped subscriptions to reduce redundant updates.
+- **Status**: ✓ RESOLVED - Scoped subscriptions and batch notifications implemented in dm4-state.js
+- **Implementation**: 
+  - `subscribe()` now accepts optional `scopePath` parameter to filter updates
+  - Batch notification system reduces redundant updates by aggregating changes
+  - Backward compatible with existing code (no scope = subscribe to all changes)
 
 ### 2. **Panel Lifecycle Management**
 - **Issue**: Panel contracts (`assertPanelContract`) are not universally enforced.

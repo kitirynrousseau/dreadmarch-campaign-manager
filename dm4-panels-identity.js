@@ -514,18 +514,23 @@
       const unsubscribe = state.subscribe(function (st) {
         const selId = st.selection && st.selection.system;
         const datasetChanged = hasDatasetChanged(st);
+        const selectionChanged = selId !== lastSelectionId;
         
         // Only re-render identity when selection changes
-        if (selId !== lastSelectionId) {
+        if (selectionChanged) {
           renderIdentity(st);
-          lastSelectionId = selId;
           cachedNavcomData = null; // Invalidate cache when selection changes
         }
         
         // Only re-render navcom when selection changes or dataset changes
-        if (selId !== lastSelectionId || datasetChanged || !cachedNavcomData) {
+        if (selectionChanged || datasetChanged || !cachedNavcomData) {
           renderNavcom(st);
           cachedNavcomData = { selId, datasetVersion: lastDatasetVersion };
+        }
+        
+        // Update last selection after rendering
+        if (selectionChanged) {
+          lastSelectionId = selId;
         }
       }, ['selection', 'dataset']); // Scoped subscription - only listen to selection and dataset changes
 

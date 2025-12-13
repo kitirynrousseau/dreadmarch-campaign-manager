@@ -78,6 +78,8 @@ When adding new features:
 3. Write test cases using Jest's `describe` and `test` functions
 4. Run tests to ensure they pass
 
+Jest configuration is managed in `jest.config.js` at the root of the project.
+
 Example test structure:
 
 ```javascript

@@ -74,19 +74,36 @@
     }
 
     // DM4_HELPER_FUNCTION: renderSelection
+    // Memoized: only updates when selection actually changes
+    let lastSelectedId = null;
 
     function renderSelection(st) {
       const selected = (st.selection && st.selection.system) || null;
-      markerById.forEach(function (marker, id) {
-        marker.classList.toggle("dm-system-selected", id === selected);
-      });
+      
+      // Skip render if selection hasn't changed (memoization)
+      if (selected === lastSelectedId) {
+        return;
+      }
+      
+      // Update previous selection marker
+      if (lastSelectedId && markerById.has(lastSelectedId)) {
+        markerById.get(lastSelectedId).classList.remove("dm-system-selected");
+      }
+      
+      // Update new selection marker
+      if (selected && markerById.has(selected)) {
+        markerById.get(selected).classList.add("dm-system-selected");
+      }
+      
+      lastSelectedId = selected;
     }
 
     buildMarkers(core.state.getState().dataset);
 
+    // Use scoped subscription - only listen to selection changes
     unsubscribe = state.subscribe(function (st) {
       renderSelection(st);
-    });
+    }, ['selection']);
 
     return {
       element: container,
@@ -146,18 +163,35 @@ function createSystemLabelsLayer(core) {
   }
 
   // DM4_HELPER_FUNCTION: renderSelection
+  // Memoized: only updates when selection actually changes
+  let lastSelectedId = null;
 
   function renderSelection(st) {
     const selected = (st.selection && st.selection.system) || null;
-    labelById.forEach(function (label, id) {
-      label.classList.toggle("dm-system-label-selected", id === selected);
-    });
+    
+    // Skip render if selection hasn't changed (memoization)
+    if (selected === lastSelectedId) {
+      return;
+    }
+    
+    // Update previous selection label
+    if (lastSelectedId && labelById.has(lastSelectedId)) {
+      labelById.get(lastSelectedId).classList.remove("dm-system-label-selected");
+    }
+    
+    // Update new selection label
+    if (selected && labelById.has(selected)) {
+      labelById.get(selected).classList.add("dm-system-label-selected");
+    }
+    
+    lastSelectedId = selected;
   }
 
   buildLabels(state.getState().dataset);
+  // Use scoped subscription - only listen to selection changes
   unsubscribe = state.subscribe(function (st) {
     renderSelection(st);
-  });
+  }, ['selection']);
 
   return {
     element: container,
@@ -379,28 +413,48 @@ function createRouteLayer(core) {
   }
 
   // DM4_HELPER_FUNCTION: renderSelection
+  // Memoized: only updates when selection actually changes
+  let lastSelectedId = null;
+  let lastSelectedLines = [];
 
   function renderSelection(st) {
     const selected = (st.selection && st.selection.system) || null;
+    
+    // Skip render if selection hasn't changed (memoization)
+    if (selected === lastSelectedId) {
+      return;
+    }
 
-    // Clear all selection styling
-    allLines.forEach(function (line) {
+    // Clear previous selection styling (only previously selected lines)
+    lastSelectedLines.forEach(function (line) {
       line.classList.remove("dm-route-selected");
     });
+    lastSelectedLines = [];
 
-    if (!selected) return;
+    if (!selected) {
+      lastSelectedId = null;
+      return;
+    }
 
     const list = linesBySystem.get(selected);
-    if (!list || !list.length) return;
+    if (!list || !list.length) {
+      lastSelectedId = selected;
+      return;
+    }
 
+    // Apply new selection styling
     list.forEach(function (line) {
       line.classList.add("dm-route-selected");
+      lastSelectedLines.push(line);
     });
+    
+    lastSelectedId = selected;
   }
 
+  // Use scoped subscription - only listen to selection changes
   const unsubscribe = state.subscribe(function (st) {
     renderSelection(st);
-  });
+  }, ['selection']);
 
   // Initial render
   renderSelection(state.getState());

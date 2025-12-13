@@ -122,7 +122,7 @@ describe('DM4 State Manager', () => {
       expect(mockSubscriber).toHaveBeenCalledWith(stateManager.getState());
     });
 
-    test('should notify subscribers when state changes', () => {
+    test('should notify subscribers when state changes', (done) => {
       const stateManager = DM4.state.createStateManager();
       const mockSubscriber = jest.fn();
 
@@ -131,11 +131,15 @@ describe('DM4 State Manager', () => {
 
       stateManager.actions.selectSystem('sol');
 
-      expect(mockSubscriber).toHaveBeenCalledTimes(1);
-      expect(mockSubscriber.mock.calls[0][0].selection.system).toBe('sol');
+      // Wait for batched notification (10ms delay)
+      setTimeout(() => {
+        expect(mockSubscriber).toHaveBeenCalledTimes(1);
+        expect(mockSubscriber.mock.calls[0][0].selection.system).toBe('sol');
+        done();
+      }, 20);
     });
 
-    test('should notify multiple subscribers', () => {
+    test('should notify multiple subscribers', (done) => {
       const stateManager = DM4.state.createStateManager();
       const subscriber1 = jest.fn();
       const subscriber2 = jest.fn();
@@ -147,8 +151,12 @@ describe('DM4 State Manager', () => {
 
       stateManager.actions.selectSystem('alpha');
 
-      expect(subscriber1).toHaveBeenCalledTimes(1);
-      expect(subscriber2).toHaveBeenCalledTimes(1);
+      // Wait for batched notification (10ms delay)
+      setTimeout(() => {
+        expect(subscriber1).toHaveBeenCalledTimes(1);
+        expect(subscriber2).toHaveBeenCalledTimes(1);
+        done();
+      }, 20);
     });
 
     test('should unsubscribe correctly', () => {
@@ -164,7 +172,7 @@ describe('DM4 State Manager', () => {
       expect(mockSubscriber).not.toHaveBeenCalled();
     });
 
-    test('should handle multiple unsubscribes without error', () => {
+    test('should handle multiple unsubscribes without error', (done) => {
       const stateManager = DM4.state.createStateManager();
       const subscriber1 = jest.fn();
       const subscriber2 = jest.fn();
@@ -178,8 +186,12 @@ describe('DM4 State Manager', () => {
       unsubscribe1();
       stateManager.actions.selectSystem('sol');
 
-      expect(subscriber1).not.toHaveBeenCalled();
-      expect(subscriber2).toHaveBeenCalledTimes(1);
+      // Wait for batched notification (10ms delay)
+      setTimeout(() => {
+        expect(subscriber1).not.toHaveBeenCalled();
+        expect(subscriber2).toHaveBeenCalledTimes(1);
+        done();
+      }, 20);
     });
   });
 
@@ -193,7 +205,7 @@ describe('DM4 State Manager', () => {
       expect(state.selection.system).toBe('sol');
     });
 
-    test('should notify subscribers when system is selected', () => {
+    test('should notify subscribers when system is selected', (done) => {
       const stateManager = DM4.state.createStateManager();
       const mockSubscriber = jest.fn();
 
@@ -202,8 +214,12 @@ describe('DM4 State Manager', () => {
 
       stateManager.actions.selectSystem('alpha-centauri');
 
-      expect(mockSubscriber).toHaveBeenCalledTimes(1);
-      expect(mockSubscriber.mock.calls[0][0].selection.system).toBe('alpha-centauri');
+      // Wait for batched notification (10ms delay)
+      setTimeout(() => {
+        expect(mockSubscriber).toHaveBeenCalledTimes(1);
+        expect(mockSubscriber.mock.calls[0][0].selection.system).toBe('alpha-centauri');
+        done();
+      }, 20);
     });
 
     test('should handle null system selection', () => {
@@ -221,10 +237,10 @@ describe('DM4 State Manager', () => {
     test('should update mode when valid', () => {
       const stateManager = DM4.state.createStateManager();
 
-      stateManager.actions.setMode('tactical');
+      stateManager.actions.setMode('strategic');
 
       const state = stateManager.getState();
-      expect(state.mode).toBe('tactical');
+      expect(state.mode).toBe('strategic');
     });
 
     test('should not update mode when invalid', () => {
@@ -237,7 +253,7 @@ describe('DM4 State Manager', () => {
       expect(state.mode).toBe(initialState.mode);
     });
 
-    test('should notify subscribers when mode changes', () => {
+    test('should notify subscribers when mode changes', (done) => {
       const stateManager = DM4.state.createStateManager();
       const mockSubscriber = jest.fn();
 
@@ -246,8 +262,12 @@ describe('DM4 State Manager', () => {
 
       stateManager.actions.setMode('strategic');
 
-      expect(mockSubscriber).toHaveBeenCalledTimes(1);
-      expect(mockSubscriber.mock.calls[0][0].mode).toBe('strategic');
+      // Wait for batched notification (10ms delay)
+      setTimeout(() => {
+        expect(mockSubscriber).toHaveBeenCalledTimes(1);
+        expect(mockSubscriber.mock.calls[0][0].mode).toBe('strategic');
+        done();
+      }, 20);
     });
   });
 
@@ -414,10 +434,10 @@ describe('DM4 State Manager', () => {
       const originalState = stateManager.getState();
       const originalMode = originalState.mode;
 
-      stateManager.actions.setMode('tactical');
+      stateManager.actions.setMode('strategic');
 
       expect(originalMode).toBe('navcom');
-      expect(stateManager.getState().mode).toBe('tactical');
+      expect(stateManager.getState().mode).toBe('strategic');
     });
 
     test('should create new state references on updates', () => {

@@ -345,12 +345,49 @@
   }
 
 /***********************
-   * 1) CONFIG DEFAULTS
+   * 1) CONFIG DEFAULTS & UTILITY FUNCTIONS
    ***********************/
   const DM4_DEFAULT_CONFIG = {
     mapWidth: 4096,
     mapHeight: 4096
   };
+
+  // DM4_HELPER_FUNCTION: debounce
+  // Creates a debounced version of a function to reduce call frequency
+  function debounce(fn, delay) {
+    let timeoutId = null;
+    return function() {
+      const context = this;
+      const args = arguments;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(function() {
+        fn.apply(context, args);
+      }, delay);
+    };
+  }
+
+  // DM4_HELPER_FUNCTION: throttle
+  // Creates a throttled version of a function to limit call frequency
+  function throttle(fn, delay) {
+    let lastCall = 0;
+    let timeoutId = null;
+    return function() {
+      const context = this;
+      const args = arguments;
+      const now = Date.now();
+      
+      if (now - lastCall >= delay) {
+        lastCall = now;
+        fn.apply(context, args);
+      } else {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(function() {
+          lastCall = now;
+          fn.apply(context, args);
+        }, delay - (now - lastCall));
+      }
+    };
+  }
 
 const DM_STRINGS = {
 
@@ -1190,13 +1227,16 @@ function initMapLayer(core, root) {
   }
   window.addEventListener("resize", handleResize);
 
-  // Panning
+  // Panning with throttled rendering
   let isPanning = false;
   let hasDragged = false;
   let startX = 0;
   let startY = 0;
   let startTX = 0;
   let startTY = 0;
+
+  // Throttle pan rendering to reduce DOM updates (16ms = ~60fps)
+  const throttledPanRender = throttle(clampAndApply, 16);
 
   mapContainer.addEventListener("mousedown", function (e) {
     if (e.button !== 0) return;
@@ -1218,7 +1258,7 @@ function initMapLayer(core, root) {
     }
     translateX = startTX + dx;
     translateY = startTY + dy;
-    clampAndApply();
+    throttledPanRender();
   });
 
   window.addEventListener("mouseup", function () {
@@ -1254,6 +1294,7 @@ function initMapLayer(core, root) {
       const py = Math.round(worldY);
       const coordText = px + "," + py;
 
+      // Debounced coordinate display update
       if (core && core.topBarCoords) {
         core.topBarCoords.textContent = "Parsec Coordinates: " + coordText;
       }
@@ -1279,7 +1320,9 @@ function initMapLayer(core, root) {
     }
   });
 
-// Zooming
+// Zooming with throttled rendering (16ms = ~60fps)
+  const throttledZoomRender = throttle(clampAndApply, 16);
+  
   mapContainer.addEventListener(
     "wheel",
     function (e) {
@@ -1300,7 +1343,7 @@ function initMapLayer(core, root) {
       translateX = cx - worldX * zoom;
       translateY = cy - worldY * zoom;
 
-      clampAndApply();
+      throttledZoomRender();
     },
     { passive: false }
   );

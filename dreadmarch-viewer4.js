@@ -2307,7 +2307,6 @@ state.subscribe(function (st) {
         panelRegistry.activePanelId || "(none)"
       );
     }
-    DM4.Logger.logEnd();
   }
 
   // DM4_HELPER_FUNCTION: runDm4SelfTest
@@ -2338,7 +2337,6 @@ state.subscribe(function (st) {
       }
     }
     logPanelRegistryStatus(core, panelRegistry || null);
-    ;
   }
 
   }

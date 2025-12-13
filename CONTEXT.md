@@ -50,7 +50,9 @@
 
 - **Frontend**: Vanilla JS with modular components.
 - **State Management**:
-  - Uses `dm4-state.js` to centralize campaign data, accessible via `subscribe()` and `notify()` functions.
+  - Uses `dm4-state.js` to centralize campaign data, accessible via `subscribe()` and actions.
+  - Supports scoped subscriptions to optimize component updates (e.g., `subscribe(fn, ['selection'])`)
+  - Implements batch notifications to reduce redundant state propagation
   - Stores user access roles, campaign datasets, and editor status in top-level `state.campaign` object.
 - **Pending Decisions**:
   - **Real-Time Collaboration**:

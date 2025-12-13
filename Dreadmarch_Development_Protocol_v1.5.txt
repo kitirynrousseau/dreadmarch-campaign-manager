@@ -156,7 +156,32 @@ If a change increases complexity (more files, more indirection, more state), the
 7.2 Hashes must be updated only after a confirmed patch and user approval.  
 7.3 Intermediate / experimental bundles should be clearly labeled as non-canonical.
 
-8. Integrity Hashes (Placeholder)
+8. Logging Standards
+--------------------
+
+8.1 All modules must use the centralized DM4.Logger utility for diagnostic messages.  
+8.2 Direct console.* calls are prohibited outside of the Logger module itself.  
+8.3 Logger provides four standardized methods:
+    - DM4.Logger.log(message, ...args): General-purpose log messages
+    - DM4.Logger.warn(message, ...args): Warnings about recoverable issues
+    - DM4.Logger.error(message, ...args): Non-fatal errors requiring developer attention
+    - DM4.Logger.critical(message, fallbackFn, ...args): Critical errors requiring fallback mechanisms
+
+8.4 Critical Error Fallbacks  
+When using Logger.critical(), a fallback function must be provided that:
+- Returns a safe default value or empty structure
+- Allows the application to continue running in a degraded state
+- Never throws exceptions
+
+8.5 Message Format  
+Logger automatically prefixes all messages with "[DREADMARCH]". Module-specific prefixes 
+should be included in the message itself (e.g., "[STATE]", "[EDITOR]", "[PANEL]").
+
+8.6 Debug-Only Logging  
+Logging calls may be conditionally guarded by DM4_DEBUG checks when appropriate, but 
+critical errors and warnings should always be logged regardless of debug mode.
+
+9. Integrity Hashes (Placeholder)
 ---------------------------------
 
 This section will be populated once the integrity workflow is finalized for the modular viewer.  

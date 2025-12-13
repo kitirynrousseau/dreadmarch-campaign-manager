@@ -89,7 +89,7 @@
       setMode: function (mode) {
         if (!isKnownMode(mode)) {
           if (DM4_DEBUG) {
-            console.warn("[DREADMARCH][STATE] Attempt to set unknown mode:", mode);
+            DM4.Logger.warn("[STATE] Attempt to set unknown mode:", mode);
           }
           return;
         }
@@ -153,6 +153,6 @@
     // Optional compatibility alias
     DM4.createStateManager = createStateManager;
   } else {
-    console.error("[DREADMARCH][STATE] createStateManager is not defined in dm4-state.js.");
+    DM4.Logger.error("[STATE] createStateManager is not defined in dm4-state.js.");
   }
 })(); 

@@ -20,10 +20,12 @@
   // DM4_DATASET_CORE_FUNCTION: normalize
   function normalizeDataset(raw) {
     if (!raw || typeof raw !== "object") {
-      if (DM4_DEBUG) {
-        console.warn("[DREADMARCH] normalizeDataset: empty or invalid raw dataset");
-      }
-      return { systems: {} };
+      return DM4.Logger.critical(
+        "normalizeDataset: empty or invalid raw dataset",
+        function () {
+          return { systems: {} };
+        }
+      );
     }
 
     var systemsSrc = raw.systems || {};

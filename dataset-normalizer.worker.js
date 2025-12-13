@@ -74,6 +74,15 @@ function normalizeDataset(raw) {
         coords = pixelsSrc[id];
       }
 
+      // Validate coords if present (consistent with main thread)
+      if (coords && !Array.isArray(coords)) {
+        // Log warning but continue processing
+        errors.push({
+          systemId: id,
+          error: 'Invalid coords format (expected array)'
+        });
+      }
+
       var grid = base.grid;
       if (!grid && gridSrc && gridSrc[id]) {
         grid = gridSrc[id];

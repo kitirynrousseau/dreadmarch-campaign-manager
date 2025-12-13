@@ -30,6 +30,7 @@
   
   // Constants
   var WORKER_TIMEOUT_MS = 5000;
+  var MAX_SYSTEM_IDS_IN_FINGERPRINT = 10;
 
   /**
    * Generate cache key from raw dataset structure
@@ -39,8 +40,18 @@
     try {
       // Create a fingerprint based on dataset structure, not full content
       var systemCount = raw.systems ? Object.keys(raw.systems).length : 0;
-      var pixelCount = (raw.system_pixels || raw.endpoint_pixels) ? 
-        Object.keys(raw.system_pixels || raw.endpoint_pixels).length : 0;
+      var pixelCount = 0;
+      var pixelSource = '';
+      
+      // Track which pixel source is used
+      if (raw.system_pixels) {
+        pixelCount = Object.keys(raw.system_pixels).length;
+        pixelSource = 'system_pixels';
+      } else if (raw.endpoint_pixels) {
+        pixelCount = Object.keys(raw.endpoint_pixels).length;
+        pixelSource = 'endpoint_pixels';
+      }
+      
       var gridCount = raw.system_grid ? Object.keys(raw.system_grid).length : 0;
       var sectorCount = raw.sectors ? Object.keys(raw.sectors).length : 0;
       
@@ -50,8 +61,8 @@
       }
       
       // For large datasets, create a fingerprint
-      var systemIds = raw.systems ? Object.keys(raw.systems).sort().slice(0, 10).join(',') : '';
-      return [systemCount, pixelCount, gridCount, sectorCount, systemIds].join('|');
+      var systemIds = raw.systems ? Object.keys(raw.systems).sort().slice(0, MAX_SYSTEM_IDS_IN_FINGERPRINT).join(',') : '';
+      return [systemCount, pixelCount, pixelSource, gridCount, sectorCount, systemIds].join('|');
     } catch (e) {
       // If fingerprint fails, don't cache
       return null;
@@ -117,8 +128,6 @@
     if (!raw || typeof raw !== "object") {
       if (DM4.Logger) {
         DM4.Logger.warn("normalizeDataset: empty or invalid raw dataset");
-      } else if (DM4_DEBUG) {
-        console.warn("[DREADMARCH] normalizeDataset: empty or invalid raw dataset");
       }
       return { systems: {} };
     }

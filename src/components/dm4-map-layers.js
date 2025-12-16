@@ -280,13 +280,13 @@ function createGridLayer(core) {
   svg.setAttribute("height", height);
   svg.setAttribute("viewBox", "0 0 " + width + " " + height);
   
-  // Extract grid parameters
-  var x0 = bounds.x_min;  // 3000
-  var y0 = bounds.y_min;  // 1950
-  var cw = cellSize[0];   // 1500
-  var ch = cellSize[1];   // 1500
+  // Extract grid parameters from dataset
+  var x0 = bounds.x_min;
+  var y0 = bounds.y_min;
+  var cw = cellSize[0];
+  var ch = cellSize[1];
   
-  if (!x0 || !y0 || !cw || !ch) {
+  if (typeof x0 !== 'number' || typeof y0 !== 'number' || typeof cw !== 'number' || typeof ch !== 'number') {
     DM4.Logger.warn("[GRID] Missing galactic_grid metadata, skipping grid render");
     return { element: svg, destroy: function() {} };
   }
@@ -319,19 +319,24 @@ function createGridLayer(core) {
   var colOrigin = galacticGrid.col_origin || 17;
   var rowOrigin = galacticGrid.row_origin || "N";
   
-  // Column N = column 17 (numeric), so letter N corresponds to position 0 in our offset
-  // N = 17, M = 16, L = 15, O = 18, P = 19
-  var colBaseCharCode = "N".charCodeAt(0);
+  // Helper: Calculate grid cell identifier
+  // Grid uses column letters (L, M, N, O, P) and row numbers (16-20)
+  // Reference cell N-17 is at position (0, 0) in the offset system
+  // Column N has charCode for 'N', M is 'N'-1, L is 'N'-2, O is 'N'+1, P is 'N'+2
+  function getGridCellLabel(colOffset, rowOffset) {
+    var colBaseCharCode = rowOrigin.charCodeAt(0);
+    var colLetter = String.fromCharCode(colBaseCharCode + colOffset);
+    var rowNumber = colOrigin + rowOffset;
+    return colLetter + "-" + rowNumber;
+  }
   
   for (var i = -2; i <= 2; i++) {
-    var colLetter = String.fromCharCode(colBaseCharCode + i);
     var vx = x0 + i * cw;
     
     for (var j = -1; j <= 3; j++) {
-      var rowNumber = colOrigin + j;
       var hy = y0 + j * ch;
       
-      var labelText = colLetter + "-" + rowNumber;
+      var labelText = getGridCellLabel(i, j);
       var textEl = document.createElementNS(svgNS, "text");
       textEl.setAttribute("x", vx + 8);
       textEl.setAttribute("y", hy + ch - 8);
@@ -536,6 +541,11 @@ function createRouteLayer(core) {
     });
   }
 
+  // Route curve configuration
+  var MAJOR_ROUTE_CURVATURE = 0.35;
+  var MEDIUM_ROUTE_CURVATURE = 0.32;
+  var CURVE_SAMPLES_PER_SEGMENT = 12;
+
   // Render major and medium routes as curved polylines
   Object.keys(hyperlanes).forEach(function (routeName) {
     if (routeName === "minor_routes") return;
@@ -563,9 +573,8 @@ function createRouteLayer(core) {
     if (pts.length < 2) return;
     
     // Generate curved path
-    var curvature = routeClass === "major" ? 0.35 : 0.32;
-    var samples = 12;
-    var curvePoints = buildCurvedPolyline(pts, curvature, samples);
+    var curvature = routeClass === "major" ? MAJOR_ROUTE_CURVATURE : MEDIUM_ROUTE_CURVATURE;
+    var curvePoints = buildCurvedPolyline(pts, curvature, CURVE_SAMPLES_PER_SEGMENT);
     
     if (curvePoints.length < 2) return;
     

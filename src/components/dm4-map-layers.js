@@ -260,6 +260,126 @@ function createSystemLabelsLayer(core) {
 }
 
 
+// DM4_HELPER_FUNCTION: buildCurvedPolyline
+// Generates a smooth curved polyline using Catmull-Rom spline interpolation
+function buildCurvedPolyline(points, curvature, samplesPerSegment) {
+  if (!points || points.length < 2) return points;
+  if (points.length === 2) return points; // No curve needed for single segment
+  
+  curvature = curvature || 0.35;
+  samplesPerSegment = samplesPerSegment || 12;
+  
+  const result = [];
+  
+  // Catmull-Rom interpolation between each pair of points
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = i > 0 ? points[i - 1] : points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+    
+    for (let t = 0; t < samplesPerSegment; t++) {
+      const u = t / samplesPerSegment;
+      const u2 = u * u;
+      const u3 = u2 * u;
+      
+      // Catmull-Rom basis functions with curvature parameter
+      const c = curvature;
+      const b0 = -c * u3 + 2 * c * u2 - c * u;
+      const b1 = (2 - c) * u3 + (c - 3) * u2 + 1;
+      const b2 = (c - 2) * u3 + (3 - 2 * c) * u2 + c * u;
+      const b3 = c * u3 - c * u2;
+      
+      const x = b0 * p0[0] + b1 * p1[0] + b2 * p2[0] + b3 * p3[0];
+      const y = b0 * p0[1] + b1 * p1[1] + b2 * p2[1] + b3 * p3[1];
+      
+      result.push([x, y]);
+    }
+  }
+  
+  // Add final point
+  result.push(points[points.length - 1]);
+  
+  return result;
+}
+
+// DM4_HELPER_FUNCTION: buildRouteNodes
+// Builds an ordered list of nodes for a route from its segments
+function buildRouteNodes(segments, getPointCoords) {
+  if (!segments || segments.length === 0) return [];
+  if (segments.length === 1) {
+    // Single segment route
+    const pair = segments[0];
+    if (!Array.isArray(pair) || pair.length < 2) return [];
+    const from = getPointCoords(pair[0]);
+    const to = getPointCoords(pair[1]);
+    if (!from || !to) return [];
+    return [from, to];
+  }
+  
+  // Multiple segments - need to order them into a continuous path
+  const nodes = [];
+  const nodeIds = [];
+  const used = new Set();
+  
+  // Start with first segment
+  const first = segments[0];
+  if (!Array.isArray(first) || first.length < 2) return [];
+  
+  nodeIds.push(first[0], first[1]);
+  used.add(0);
+  
+  // Try to chain remaining segments
+  let changed = true;
+  while (changed && used.size < segments.length) {
+    changed = false;
+    const lastNodeId = nodeIds[nodeIds.length - 1];
+    const firstNodeId = nodeIds[0];
+    
+    for (let i = 0; i < segments.length; i++) {
+      if (used.has(i)) continue;
+      const seg = segments[i];
+      if (!Array.isArray(seg) || seg.length < 2) continue;
+      
+      // Try to attach to end
+      if (seg[0] === lastNodeId) {
+        nodeIds.push(seg[1]);
+        used.add(i);
+        changed = true;
+        break;
+      } else if (seg[1] === lastNodeId) {
+        nodeIds.push(seg[0]);
+        used.add(i);
+        changed = true;
+        break;
+      }
+      // Try to attach to beginning
+      else if (seg[1] === firstNodeId) {
+        nodeIds.unshift(seg[0]);
+        used.add(i);
+        changed = true;
+        break;
+      } else if (seg[0] === firstNodeId) {
+        nodeIds.unshift(seg[1]);
+        used.add(i);
+        changed = true;
+        break;
+      }
+    }
+  }
+  
+  // Convert node IDs to coordinates
+  for (let i = 0; i < nodeIds.length; i++) {
+    const coords = getPointCoords(nodeIds[i]);
+    if (coords) {
+      nodes.push(coords);
+    }
+  }
+  
+  return nodes;
+}
+
+
 // DM4_CORE_FUNCTION: createRouteLayer
 
 
@@ -364,28 +484,31 @@ function createRouteLayer(core) {
     const meta = routeMeta[routeName] || {};
     const cls = meta.route_class === "major" ? "route-major" : "route-medium";
 
+    // Build ordered node list for the entire route
+    const nodes = buildRouteNodes(segments, getPointCoords);
+    if (nodes.length < 2) return;
+
+    // Generate curved polyline for major/medium routes
+    const curvature = meta.route_class === "major" ? 0.35 : 0.32;
+    const samplesPerSegment = 12;
+    const curvedPoints = buildCurvedPolyline(nodes, curvature, samplesPerSegment);
+
+    // Create polyline element
+    const polyline = document.createElementNS(svgNS, "polyline");
+    const pointsStr = curvedPoints.map(function (pt) {
+      return pt[0] + "," + pt[1];
+    }).join(" ");
+    
+    polyline.setAttribute("points", pointsStr);
+    polyline.setAttribute("class", cls);
+    polyline.setAttribute("data-route-name", routeName);
+    
+    svg.appendChild(polyline);
+    
+    // Register polyline for all systems in the route
     segments.forEach(function (pair) {
       if (!Array.isArray(pair) || pair.length < 2) return;
-      const from = pair[0];
-      const to = pair[1];
-
-      const fromCoords = getPointCoords(from);
-      const toCoords = getPointCoords(to);
-      if (!fromCoords || !toCoords) return;
-
-      const line = document.createElementNS(svgNS, "line");
-      line.setAttribute("x1", fromCoords[0]);
-      line.setAttribute("y1", fromCoords[1]);
-      line.setAttribute("x2", toCoords[0]);
-      line.setAttribute("y2", toCoords[1]);
-
-      line.setAttribute("class", cls);
-      line.setAttribute("data-route-name", routeName);
-      line.setAttribute("data-from", from);
-      line.setAttribute("data-to", to);
-
-      svg.appendChild(line);
-      registerLine(line, from, to);
+      registerLine(polyline, pair[0], pair[1]);
     });
   });
 
@@ -526,6 +649,92 @@ function createRouteLayer(core) {
 }
 
 
+// DM4_CORE_FUNCTION: createGridLayer
+function createGridLayer(core) {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const config = core.config || {};
+  const width = config.mapWidth || 4096;
+  const height = config.mapHeight || 4096;
+
+  const state = core.state;
+  const dataset = state.getState().dataset || {};
+  const gridMeta = dataset.galactic_grid || {};
+  
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.classList.add("dm-layer-grid");
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+
+  // Extract grid parameters
+  const cellSize = gridMeta.cell_size || [1500, 1500];
+  const cellWidth = cellSize[0];
+  const cellHeight = cellSize[1];
+  
+  const refCell = gridMeta.reference_cell || {};
+  const refBounds = refCell.bounds || {};
+  
+  // Reference cell N-17 bounds
+  const x0 = refBounds.x_min || 3000;
+  const y0 = refBounds.y_min || 1500;
+  
+  // Column letters: L(-2), M(-1), N(0), O(+1) relative to N
+  const colNames = ["L", "M", "N", "O"];
+  const colOffsets = [-2, -1, 0, 1];
+  
+  // Row numbers: 16(-1), 17(0), 18(+1), 19(+2) relative to 17
+  const rowNumbers = [16, 17, 18, 19];
+  const rowOffsets = [-1, 0, 1, 2];
+  
+  // Draw vertical grid lines (columns)
+  colOffsets.forEach(function (offset, idx) {
+    const x = x0 + offset * cellWidth;
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", x);
+    line.setAttribute("y1", 0);
+    line.setAttribute("x2", x);
+    line.setAttribute("y2", height);
+    line.setAttribute("class", "grid-major");
+    svg.appendChild(line);
+  });
+  
+  // Draw horizontal grid lines (rows)
+  rowOffsets.forEach(function (offset, idx) {
+    const y = y0 + offset * cellHeight;
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", 0);
+    line.setAttribute("y1", y);
+    line.setAttribute("x2", width);
+    line.setAttribute("y2", y);
+    line.setAttribute("class", "grid-major");
+    svg.appendChild(line);
+  });
+  
+  // Add grid cell labels
+  colOffsets.forEach(function (colOffset, colIdx) {
+    rowOffsets.forEach(function (rowOffset, rowIdx) {
+      const x = x0 + colOffset * cellWidth;
+      const y = y0 + rowOffset * cellHeight;
+      
+      const label = document.createElementNS(svgNS, "text");
+      label.setAttribute("x", x + 20);
+      label.setAttribute("y", y + cellHeight - 20);
+      label.setAttribute("class", "grid-label");
+      label.textContent = colNames[colIdx] + "-" + rowNumbers[rowIdx];
+      
+      svg.appendChild(label);
+    });
+  });
+
+  return {
+    element: svg,
+    destroy: function () {
+      // No subscriptions to clean up
+    }
+  };
+}
+
+
 /*********************************
  * 5) MAP LAYER WITH DATA-BOUNDS CAMERA
  *********************************/
@@ -537,10 +746,12 @@ function initMapLayer(core, root) {
   const viewport = document.createElement("div");
   viewport.classList.add("dm-map-viewport");
 
+  const gridLayer = createGridLayer(core);
   const routeLayer = createRouteLayer(core);
   const systemsLayer = createSystemMarkersLayer(core);
   const labelsLayer = createSystemLabelsLayer(core);
 
+  viewport.appendChild(gridLayer.element);
   viewport.appendChild(routeLayer.element);
   viewport.appendChild(systemsLayer.element);
   viewport.appendChild(labelsLayer.element);
@@ -830,6 +1041,7 @@ function initMapLayer(core, root) {
 
   return {
     destroy: function () {
+      gridLayer.destroy();
       systemsLayer.destroy();
       routeLayer.destroy();
       labelsLayer.destroy();

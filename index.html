@@ -186,7 +186,8 @@
   color: var(--dm-system-label-selected-color, var(--selection-color));
   filter: var(--sysLabelGlowSelected);
 }
-    .dm-layer-routes line {
+    .dm-layer-routes line,
+    .dm-layer-routes polyline {
       vector-effect: non-scaling-stroke;
     }
     .route-major {
@@ -208,10 +209,38 @@
       opacity: 0.8;
       stroke-dasharray: var(--minor-dasharray);
     }
-    .dm-layer-routes line.dm-route-selected {
+    .dm-layer-routes line.dm-route-selected,
+    .dm-layer-routes polyline.dm-route-selected {
       stroke: var(--route-selected-color, var(--selection-color, #e46b24));
       opacity: 1;
       filter: drop-shadow(0 0 6px var(--selection-glow-color, #e46b24));
+    }
+
+    /* Grid styles */
+    .dm-layer-grid {
+      pointer-events: none;
+    }
+    
+    .grid-major {
+      stroke: var(--grid-major-color, rgba(180, 120, 120, 0.25));
+      stroke-width: var(--grid-major-width, 1);
+      fill: none;
+      vector-effect: non-scaling-stroke;
+    }
+    
+    .grid-label {
+      fill: var(--grid-label-color, rgba(180, 120, 120, 0.4));
+      font-size: var(--grid-label-font-size, 11px);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      pointer-events: none;
+      user-select: none;
+    }
+    
+    /* Hide grid when hide-grid class is present */
+    .app.hide-grid .dm-layer-grid {
+      display: none;
     }
     
 

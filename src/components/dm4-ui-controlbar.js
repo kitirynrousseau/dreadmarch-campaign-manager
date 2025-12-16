@@ -27,10 +27,15 @@
       const editorToggle = document.createElement("button");
       editorToggle.textContent = "EDITOR";
 
+      const gridToggle = document.createElement("button");
+      gridToggle.textContent = "GRID";
+      gridToggle.classList.add("grid-toggle");
+
       bar.appendChild(navBtn);
       bar.appendChild(stratBtn);
       bar.appendChild(cmdBtn);
       bar.appendChild(editorToggle);
+      bar.appendChild(gridToggle);
 
       root.appendChild(bar);
 
@@ -83,6 +88,24 @@
           panelRegistry.activatePanel("editor");
         }
       });
+
+      // Grid toggle button
+      let gridVisible = true; // Default to visible
+      gridToggle.addEventListener("click", function () {
+        gridVisible = !gridVisible;
+        const appElement = document.querySelector(".app");
+        if (appElement) {
+          if (gridVisible) {
+            appElement.classList.remove("hide-grid");
+            gridToggle.classList.add("active");
+          } else {
+            appElement.classList.add("hide-grid");
+            gridToggle.classList.remove("active");
+          }
+        }
+      });
+      // Set initial state
+      gridToggle.classList.add("active");
 
       const unsubscribe = core.state.subscribe(function (st) {
         setActiveButton(st.mode || "navcom");

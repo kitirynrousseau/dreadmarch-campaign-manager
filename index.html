@@ -597,9 +597,9 @@
 
   <script>
     (function () {
-      // Preserved for potential future subset loading functionality
-      // Currently always loads the main dataset directly
-      function DM4_startViewerWithDataset() {
+      // Initialize the viewer with the main dataset.
+      // Function signature preserved for potential future dataset switching or subset loading.
+      function DM4_startViewer() {
         var root = document.getElementById("dreadmarch-viewer-root");
         if (!root) return;
 
@@ -622,12 +622,14 @@
         window.DreadmarchViewer4.bootstrap(root, config, dataset, null);
       }
 
-      window.DM4_startViewerWithDataset = DM4_startViewerWithDataset;
+      // Legacy alias preserved for any external references
+      window.DM4_startViewerWithDataset = DM4_startViewer;
+      window.DM4_startViewer = DM4_startViewer;
 
       var root = document.getElementById("dreadmarch-viewer-root");
       try {
         // Boot with main dataset
-        DM4_startViewerWithDataset();
+        DM4_startViewer();
       } catch (err) {
         DM4.Logger.error("Failed to initialize viewer:", err);
         if (root) {

@@ -432,7 +432,7 @@ function createRouteLayer(core) {
   }
 
   // DM4_HELPER_FUNCTION: buildRouteSegments
-  // Collect all segments for each named route to create continuous paths
+  // Collect all segments for each named route and order them sequentially
   function buildRouteSegments() {
     var routeSegments = {};
     
@@ -442,32 +442,65 @@ function createRouteLayer(core) {
       var segments = hyperlanes[routeName] || [];
       if (!segments.length) return;
       
-      // Collect all points in order
-      var points = [];
-      var pointSet = {};
+      // Build ordered route by connecting segments
+      var orderedPoints = [];
+      var orderedSystems = [];
+      var usedSegments = {};
       
-      segments.forEach(function (pair) {
-        if (!Array.isArray(pair) || pair.length < 2) return;
-        var fromCoords = getPointCoords(pair[0]);
-        var toCoords = getPointCoords(pair[1]);
-        if (!fromCoords || !toCoords) return;
-        
-        var fromKey = fromCoords[0] + "," + fromCoords[1];
-        var toKey = toCoords[0] + "," + toCoords[1];
-        
-        if (!pointSet[fromKey]) {
-          points.push({ coords: fromCoords, id: pair[0] });
-          pointSet[fromKey] = true;
+      // Start with first segment
+      if (segments[0] && segments[0].length >= 2) {
+        var fromCoords = getPointCoords(segments[0][0]);
+        var toCoords = getPointCoords(segments[0][1]);
+        if (fromCoords && toCoords) {
+          orderedPoints.push(fromCoords);
+          orderedPoints.push(toCoords);
+          orderedSystems.push(segments[0][0]);
+          orderedSystems.push(segments[0][1]);
+          usedSegments[0] = true;
         }
-        if (!pointSet[toKey]) {
-          points.push({ coords: toCoords, id: pair[1] });
-          pointSet[toKey] = true;
+      }
+      
+      // Connect remaining segments in order
+      var lastPoint = segments[0] ? segments[0][1] : null;
+      var foundConnection = true;
+      
+      while (foundConnection && Object.keys(usedSegments).length < segments.length) {
+        foundConnection = false;
+        
+        for (var i = 0; i < segments.length; i++) {
+          if (usedSegments[i]) continue;
+          if (!segments[i] || segments[i].length < 2) continue;
+          
+          var from = segments[i][0];
+          var to = segments[i][1];
+          
+          if (from === lastPoint) {
+            var coords = getPointCoords(to);
+            if (coords) {
+              orderedPoints.push(coords);
+              orderedSystems.push(to);
+              lastPoint = to;
+              usedSegments[i] = true;
+              foundConnection = true;
+              break;
+            }
+          } else if (to === lastPoint) {
+            var coords = getPointCoords(from);
+            if (coords) {
+              orderedPoints.push(coords);
+              orderedSystems.push(from);
+              lastPoint = from;
+              usedSegments[i] = true;
+              foundConnection = true;
+              break;
+            }
+          }
         }
-      });
+      }
       
       routeSegments[routeName] = {
-        points: points.map(function(p) { return p.coords; }),
-        systems: points.map(function(p) { return p.id; }),
+        points: orderedPoints,
+        systems: orderedSystems,
         meta: routeMeta[routeName] || {}
       };
     });
@@ -541,18 +574,8 @@ function createRouteLayer(core) {
                       " L " + (x - arrowWidth / 2) + " " + (y + arrowSize / 2) + " Z";
       arrow.setAttribute("d", arrowPath);
 
-      // Calculate rotation based on outward direction
-      let angle = 0;
-      if (m.outwardX === 0 && m.outwardY > 0) {
-        angle = 180;
-      } else if (m.outwardX === 0 && m.outwardY < 0) {
-        angle = 0;
-      } else if (m.outwardX > 0 && m.outwardY === 0) {
-        angle = 90;
-      } else if (m.outwardX < 0 && m.outwardY === 0) {
-        angle = -90;
-      }
-
+      // Calculate rotation based on outward direction (handles all angles)
+      var angle = Math.atan2(m.outwardY, m.outwardX) * 180 / Math.PI + 90;
       arrow.setAttribute("transform", "rotate(" + angle + " " + x + " " + y + ")");
 
       // Route label with system label styling

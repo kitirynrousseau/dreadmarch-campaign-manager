@@ -1,26 +1,25 @@
-# Governance Rule-Checking Framework for Dreadmarch Campaign Manager
+# Additional Instructions: Rule Review, Refresh, Reactivation, and Lock-In
 
-Finalized Governance Framework: 
-The governance framework outlined in this document has been derived from "Dreadmarch_Development_Protocol v1.5." It consolidates all the fundamental principles, ensuring that the system adheres to established development protocols while remaining flexible.
+## Purpose
+When instructed to "review the rules," "refresh the rules," "reactivate the rules," "lock-in the rules," or given similar instructions, the following steps must be followed to ensure strict adherence to protocols:
 
-## Detailed Overview:
-- This framework establishes the boundaries and protocols for rule-developing decisions.
-- It is structured to ensure clarity, integrity, and adaptability.
-- Each component is designed to be modular, allowing incremental changes.
+1. **Revisit the Governance Framework Document**
+   - Open and reread the current version of `governance-rule-checking-framework.md` (or any updated equivalent).
+   - Fully align with the specified rules, workflows, and protocols.
+   - Treat the document as the single source of truth for all relevant operations.
 
-## Rule-Checking Workflows:
-1. A rule-checking workflow follows a pipeline designated to verify compliance.
-2. Automated tools and manual processes are part of the structure.
-3. Rule-tracking introduces audit-based rules and supports scalability.
+2. **Reassess Operating Context**
+   - Verify the context of the current workflow, project, or task to ensure it complies with the rules.
+   - Pause any activity not fully aligned with the framework and notify the user immediately.
 
-## Enhanced Processes for Governance:
-- Decision-making is designed around collaborative teams.
-- Critical workflows split checks into internal conditions.
-- Framework documentation includes every entered module or dimension automatically.
+3. **Flag Inconsistencies or Unaddressed Gaps**
+   - Identify any ambiguities, gaps, or instances where the rules might not offer explicit coverage.
+   - Bring these inconsistencies to the user's attention for clarification.
 
-- Each tracked enhancement process updates consistency reports in parallel within decision priorities.
+4. **Full System Reset of Approach**
+   - Reset decision-making models and operational assumptions to align strictly with the governance framework.
 
-## Rule Extension Protocols:
-This section guarantees rules smoothly **override complex histories** values inside ministry replacements (featuring optimizing and replacing regressions). Governance enriches all present suggestions monitoring conversative datasets earlier.
----
->
+5. **Declaration of Alignment**
+   - Confirm to the user that the rules have been reviewed, refreshed, or locked in, and state readiness for compliance.
+
+These instructions ensure that operations remain consistent with user expectations and project governance standards.

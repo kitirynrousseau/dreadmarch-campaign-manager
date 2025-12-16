@@ -39,10 +39,10 @@
    * the original core behavior and leaves room to vary by mode later.
    */
   var DM4_STYLE_PROFILES = {
-    navcom: "dm-style-palette-e2.css",
-    strategic: "dm-style-palette-e2.css",
-    intel: "dm-style-palette-e2.css",
-    command: "dm-style-palette-e2.css"
+    navcom: "src/styles/dm-style-palette-e2.css",
+    strategic: "src/styles/dm-style-palette-e2.css",
+    intel: "src/styles/dm-style-palette-e2.css",
+    command: "src/styles/dm-style-palette-e2.css"
   };
 
   // DM4_STYLE_CORE_FUNCTION: runStyleContractChecks

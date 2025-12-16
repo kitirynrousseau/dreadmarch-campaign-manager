@@ -241,3 +241,29 @@
     );
   opacity: var(--dm-map-plate-vignette-opacity);
 }
+
+/* ------------------------------------------------------------------
+ * 4. GRID AND ROUTE RENDERING STYLES
+ * ------------------------------------------------------------------*/
+
+/* Grid styles */
+.grid-major {
+  stroke: rgba(226, 58, 58, 0.25);
+  stroke-width: 1px;
+  fill: none;
+}
+
+.grid-label {
+  fill: rgba(226, 58, 58, 0.4);
+  font-size: 11px;
+  pointer-events: none;
+  text-anchor: start;
+  dominant-baseline: text-after-edge;
+}
+
+/* Route polyline vector effect */
+.route-major polyline,
+.route-medium polyline {
+  vector-effect: non-scaling-stroke;
+}
+

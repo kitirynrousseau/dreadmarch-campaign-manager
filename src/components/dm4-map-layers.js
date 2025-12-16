@@ -260,14 +260,102 @@ function createSystemLabelsLayer(core) {
 }
 
 
+// DM4_CORE_FUNCTION: createGridLayer
+function createGridLayer(core) {
+  var svgNS = "http://www.w3.org/2000/svg";
+  var config = core.config || {};
+  var width = config.mapWidth || 6000;
+  var height = config.mapHeight || 6000;
+  
+  var state = core.state;
+  var dataset = state.getState().dataset || {};
+  var galacticGrid = dataset.galactic_grid || {};
+  var refCell = galacticGrid.reference_cell || {};
+  var bounds = refCell.bounds || {};
+  var cellSize = galacticGrid.cell_size || [null, null];
+  
+  var svg = document.createElementNS(svgNS, "svg");
+  svg.classList.add("dm-layer-grid");
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+  
+  // Extract grid parameters
+  var x0 = bounds.x_min;  // 3000
+  var y0 = bounds.y_min;  // 1950
+  var cw = cellSize[0];   // 1500
+  var ch = cellSize[1];   // 1500
+  
+  if (!x0 || !y0 || !cw || !ch) {
+    DM4.Logger.warn("[GRID] Missing galactic_grid metadata, skipping grid render");
+    return { element: svg, destroy: function() {} };
+  }
+  
+  // Draw vertical lines (columns L, M, N, O, P)
+  for (var i = -2; i <= 2; i++) {
+    var vx = x0 + i * cw;
+    var line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", vx);
+    line.setAttribute("y1", y0 - 1 * ch);
+    line.setAttribute("x2", vx);
+    line.setAttribute("y2", y0 + 3 * ch);
+    line.setAttribute("class", "grid-major");
+    svg.appendChild(line);
+  }
+  
+  // Draw horizontal lines (rows 16, 17, 18, 19, 20)
+  for (var j = -1; j <= 3; j++) {
+    var hy = y0 + j * ch;
+    var line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", x0 - 2 * cw);
+    line.setAttribute("y1", hy);
+    line.setAttribute("x2", x0 + 2 * cw);
+    line.setAttribute("y2", hy);
+    line.setAttribute("class", "grid-major");
+    svg.appendChild(line);
+  }
+  
+  // Draw grid cell labels
+  var colOrigin = galacticGrid.col_origin || 17;
+  var rowOrigin = galacticGrid.row_origin || "N";
+  
+  // Column N = column 17 (numeric), so letter N corresponds to position 0 in our offset
+  // N = 17, M = 16, L = 15, O = 18, P = 19
+  var colBaseCharCode = "N".charCodeAt(0);
+  
+  for (var i = -2; i <= 2; i++) {
+    var colLetter = String.fromCharCode(colBaseCharCode + i);
+    var vx = x0 + i * cw;
+    
+    for (var j = -1; j <= 3; j++) {
+      var rowNumber = colOrigin + j;
+      var hy = y0 + j * ch;
+      
+      var labelText = colLetter + "-" + rowNumber;
+      var textEl = document.createElementNS(svgNS, "text");
+      textEl.setAttribute("x", vx + 8);
+      textEl.setAttribute("y", hy + ch - 8);
+      textEl.setAttribute("class", "grid-label");
+      textEl.textContent = labelText;
+      svg.appendChild(textEl);
+    }
+  }
+  
+  return {
+    element: svg,
+    destroy: function() {}
+  };
+}
+
+
 // DM4_CORE_FUNCTION: createRouteLayer
 
 
 function createRouteLayer(core) {
   const svgNS = "http://www.w3.org/2000/svg";
   const config = core.config || {};
-  const width = config.mapWidth || 4096;
-  const height = config.mapHeight || 4096;
+  const width = config.mapWidth || 6000;
+  const height = config.mapHeight || 6000;
 
   const state = core.state;
   const dataset = state.getState().dataset || {};
@@ -277,6 +365,97 @@ function createRouteLayer(core) {
   const endpoints = dataset.endpoint_pixels || {};
 
   const endpointMeta = dataset.endpoint_metadata || {};
+
+  // DM4_HELPER_FUNCTION: buildRouteNodes
+  function buildRouteNodes(segs) {
+    if (!segs || !segs.length) return [];
+    
+    var adj = {};
+    segs.forEach(function(pair) {
+      var a = pair[0];
+      var b = pair[1];
+      if (!adj[a]) adj[a] = [];
+      if (!adj[b]) adj[b] = [];
+      adj[a].push(b);
+      adj[b].push(a);
+    });
+    
+    // Find terminal node (degree 1) to start from
+    var start = null;
+    for (var node in adj) {
+      if (adj[node].length === 1) {
+        start = node;
+        break;
+      }
+    }
+    if (!start) start = segs[0][0];
+    
+    var routeNodes = [start];
+    var prev = null;
+    var current = start;
+    
+    while (true) {
+      var neighbors = adj[current] || [];
+      var nextNode = null;
+      
+      for (var i = 0; i < neighbors.length; i++) {
+        var n = neighbors[i];
+        if (n === prev) continue;
+        if (routeNodes.indexOf(n) === -1) {
+          nextNode = n;
+          break;
+        }
+      }
+      
+      if (!nextNode) break;
+      routeNodes.push(nextNode);
+      prev = current;
+      current = nextNode;
+    }
+    
+    return routeNodes;
+  }
+
+  // DM4_HELPER_FUNCTION: buildCurvedPolyline
+  function buildCurvedPolyline(points, curvature, samplesPerSegment) {
+    if (!points || points.length < 2) return [];
+    
+    var pts = points.map(function(p) { return [p[0], p[1]]; });
+    var curvePoints = [];
+    curvePoints.push([pts[0][0], pts[0][1]]);
+    
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p0 = i > 0 ? pts[i - 1] : pts[i];
+      var p1 = pts[i];
+      var p2 = pts[i + 1];
+      var p3 = i + 2 < pts.length ? pts[i + 2] : pts[i + 1];
+      
+      for (var s = 1; s <= samplesPerSegment; s++) {
+        var t = s / samplesPerSegment;
+        var t2 = t * t;
+        var t3 = t2 * t;
+        
+        var c = curvature;
+        var q0 = -c * t3 + 2 * c * t2 - c * t;
+        var q1 = (2 - c) * t3 + (c - 3) * t2 + 1;
+        var q2 = (c - 2) * t3 + (3 - 2 * c) * t2 + c * t;
+        var q3 = c * t3 - c * t2;
+        
+        var x, y;
+        if (s === samplesPerSegment) {
+          x = p2[0];
+          y = p2[1];
+        } else {
+          x = q0 * p0[0] + q1 * p1[0] + q2 * p2[0] + q3 * p3[0];
+          y = q0 * p0[1] + q1 * p1[1] + q2 * p2[1] + q3 * p3[1];
+        }
+        
+        curvePoints.push([Math.round(x), Math.round(y)]);
+      }
+    }
+    
+    return curvePoints;
+  }
 
   // DM4_HELPER_FUNCTION: buildRouteEdgeMarkers
   function buildRouteEdgeMarkers() {
@@ -357,38 +536,57 @@ function createRouteLayer(core) {
     });
   }
 
+  // Render major and medium routes as curved polylines
   Object.keys(hyperlanes).forEach(function (routeName) {
     if (routeName === "minor_routes") return;
-
-    const segments = hyperlanes[routeName] || [];
-    const meta = routeMeta[routeName] || {};
-    const cls = meta.route_class === "major" ? "route-major" : "route-medium";
-
-    segments.forEach(function (pair) {
-      if (!Array.isArray(pair) || pair.length < 2) return;
-      const from = pair[0];
-      const to = pair[1];
-
-      const fromCoords = getPointCoords(from);
-      const toCoords = getPointCoords(to);
-      if (!fromCoords || !toCoords) return;
-
-      const line = document.createElementNS(svgNS, "line");
-      line.setAttribute("x1", fromCoords[0]);
-      line.setAttribute("y1", fromCoords[1]);
-      line.setAttribute("x2", toCoords[0]);
-      line.setAttribute("y2", toCoords[1]);
-
-      line.setAttribute("class", cls);
-      line.setAttribute("data-route-name", routeName);
-      line.setAttribute("data-from", from);
-      line.setAttribute("data-to", to);
-
-      svg.appendChild(line);
-      registerLine(line, from, to);
-    });
+    
+    var segments = hyperlanes[routeName] || [];
+    var meta = routeMeta[routeName] || {};
+    var routeClass = meta.route_class || "medium";
+    var cls = routeClass === "major" ? "route-major" : "route-medium";
+    
+    if (!segments.length) return;
+    
+    // Build ordered path through route nodes
+    var routeNodes = buildRouteNodes(segments);
+    if (!routeNodes.length) return;
+    
+    // Get coordinates for each node
+    var pts = [];
+    for (var i = 0; i < routeNodes.length; i++) {
+      var coords = getPointCoords(routeNodes[i]);
+      if (coords && Array.isArray(coords) && coords.length >= 2) {
+        pts.push(coords);
+      }
+    }
+    
+    if (pts.length < 2) return;
+    
+    // Generate curved path
+    var curvature = routeClass === "major" ? 0.35 : 0.32;
+    var samples = 12;
+    var curvePoints = buildCurvedPolyline(pts, curvature, samples);
+    
+    if (curvePoints.length < 2) return;
+    
+    // Render as SVG polyline
+    var polyline = document.createElementNS(svgNS, "polyline");
+    var pointsAttr = curvePoints.map(function(p) {
+      return p[0] + "," + p[1];
+    }).join(" ");
+    
+    polyline.setAttribute("points", pointsAttr);
+    polyline.setAttribute("class", cls);
+    polyline.setAttribute("data-route-name", routeName);
+    polyline.setAttribute("fill", "none");
+    
+    var fromSystem = routeNodes[0];
+    var toSystem = routeNodes[routeNodes.length - 1];
+    svg.appendChild(polyline);
+    registerLine(polyline, fromSystem, toSystem);
   });
 
+  // Minor routes stay as straight lines
   const minorList = hyperlanes.minor_routes || [];
   minorList.forEach(function (pair) {
     if (!Array.isArray(pair) || pair.length < 2) return;
@@ -537,10 +735,12 @@ function initMapLayer(core, root) {
   const viewport = document.createElement("div");
   viewport.classList.add("dm-map-viewport");
 
+  const gridLayer = createGridLayer(core);
   const routeLayer = createRouteLayer(core);
   const systemsLayer = createSystemMarkersLayer(core);
   const labelsLayer = createSystemLabelsLayer(core);
 
+  viewport.appendChild(gridLayer.element);
   viewport.appendChild(routeLayer.element);
   viewport.appendChild(systemsLayer.element);
   viewport.appendChild(labelsLayer.element);
@@ -578,11 +778,11 @@ function initMapLayer(core, root) {
   });
 
   if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
-    // Fallback: just treat 0..4096 as world
+    // Fallback: just treat 0..6000 as world
     minX = 0;
     minY = 0;
-    maxX = core.config.mapWidth || 4096;
-    maxY = core.config.mapHeight || 4096;
+    maxX = core.config.mapWidth || 6000;
+    maxY = core.config.mapHeight || 6000;
   }
 
   const padding = 50;
@@ -830,6 +1030,7 @@ function initMapLayer(core, root) {
 
   return {
     destroy: function () {
+      gridLayer.destroy();
       systemsLayer.destroy();
       routeLayer.destroy();
       labelsLayer.destroy();

@@ -351,8 +351,8 @@ window.DM4_DATASETS.main = {
       "bounds": {
         "x_max": 4500,
         "x_min": 3000,
-        "y_max": 3000,
-        "y_min": 1500
+        "y_max": 3450,
+        "y_min": 1950
       },
       "col": 17,
       "row": "N"

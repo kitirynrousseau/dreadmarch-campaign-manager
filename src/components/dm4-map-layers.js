@@ -357,6 +357,40 @@ function createRouteLayer(core) {
     });
   }
 
+  // DM4_HELPER_FUNCTION: createCurvedPath
+  // Generate a natural-looking curved path between two points
+  function createCurvedPath(x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    // For very short routes, use straight lines
+    if (dist < 200) {
+      return "M " + x1 + " " + y1 + " L " + x2 + " " + y2;
+    }
+    
+    // Calculate curve control point offset perpendicular to the line
+    // Use a subtle curve (10% of distance) for natural appearance
+    const curveMagnitude = dist * 0.10;
+    
+    // Perpendicular vector (rotated 90 degrees)
+    const perpX = -dy / dist;
+    const perpY = dx / dist;
+    
+    // Add slight randomness based on coordinate hash for variety
+    const hash = (x1 + y1 + x2 + y2) % 1000;
+    const randomFactor = (hash / 1000) * 0.5 + 0.75; // Range: 0.75 to 1.25
+    
+    // Control point at midpoint, offset perpendicular to the line
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+    const cpX = midX + perpX * curveMagnitude * randomFactor;
+    const cpY = midY + perpY * curveMagnitude * randomFactor;
+    
+    // Use quadratic bezier curve
+    return "M " + x1 + " " + y1 + " Q " + cpX + " " + cpY + " " + x2 + " " + y2;
+  }
+
   Object.keys(hyperlanes).forEach(function (routeName) {
     if (routeName === "minor_routes") return;
 
@@ -373,19 +407,20 @@ function createRouteLayer(core) {
       const toCoords = getPointCoords(to);
       if (!fromCoords || !toCoords) return;
 
-      const line = document.createElementNS(svgNS, "line");
-      line.setAttribute("x1", fromCoords[0]);
-      line.setAttribute("y1", fromCoords[1]);
-      line.setAttribute("x2", toCoords[0]);
-      line.setAttribute("y2", toCoords[1]);
+      const path = document.createElementNS(svgNS, "path");
+      const pathData = createCurvedPath(
+        fromCoords[0], fromCoords[1],
+        toCoords[0], toCoords[1]
+      );
+      path.setAttribute("d", pathData);
 
-      line.setAttribute("class", cls);
-      line.setAttribute("data-route-name", routeName);
-      line.setAttribute("data-from", from);
-      line.setAttribute("data-to", to);
+      path.setAttribute("class", cls);
+      path.setAttribute("data-route-name", routeName);
+      path.setAttribute("data-from", from);
+      path.setAttribute("data-to", to);
 
-      svg.appendChild(line);
-      registerLine(line, from, to);
+      svg.appendChild(path);
+      registerLine(path, from, to);
     });
   });
 
@@ -399,19 +434,20 @@ function createRouteLayer(core) {
     const toCoords = getPointCoords(to);
     if (!fromCoords || !toCoords) return;
 
-    const line = document.createElementNS(svgNS, "line");
-    line.setAttribute("x1", fromCoords[0]);
-    line.setAttribute("y1", fromCoords[1]);
-    line.setAttribute("x2", toCoords[0]);
-    line.setAttribute("y2", toCoords[1]);
+    const path = document.createElementNS(svgNS, "path");
+    const pathData = createCurvedPath(
+      fromCoords[0], fromCoords[1],
+      toCoords[0], toCoords[1]
+    );
+    path.setAttribute("d", pathData);
 
-    line.setAttribute("class", "route-minor");
-    line.setAttribute("data-route-name", "minor_routes");
-    line.setAttribute("data-from", from);
-    line.setAttribute("data-to", to);
+    path.setAttribute("class", "route-minor");
+    path.setAttribute("data-route-name", "minor_routes");
+    path.setAttribute("data-from", from);
+    path.setAttribute("data-to", to);
 
-    svg.appendChild(line);
-    registerLine(line, from, to);
+    svg.appendChild(path);
+    registerLine(path, from, to);
   });
 
 

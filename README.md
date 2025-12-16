@@ -116,7 +116,7 @@ if (!dataset) {
 
 ## Development Protocol
 
-See `Dreadmarch_Development_Protocol_v1.5.txt` for comprehensive development guidelines including:
+See `Dreadmarch_Development_Protocol_v1.6.txt` for comprehensive development guidelines including:
 
 - Core governance rules
 - Dataset mutation rules
@@ -310,12 +310,15 @@ describe('My Module', () => {
 ```
 
 ## Documentation
+### For AI Collaboration
 
+- **[AI Collaboration Guide](docs/ai-collaboration-guide.md)** - Guide for AI engineers working on this project, including decision protocols, common scenarios, and communication style
+- 
 ### Core Documentation
 
 - **[Architecture Overview](docs/architecture.md)** - High-level system architecture, module interactions, and data flow
 - **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute, development standards, and workflow
-- **[Development Protocol](Dreadmarch_Development_Protocol_v1.5.txt)** - Detailed technical protocol and rules
+- **[Development Protocol](Dreadmarch_Development_Protocol_v1.6.txt)** - Detailed technical protocol and rules
 
 ### Key Concepts
 

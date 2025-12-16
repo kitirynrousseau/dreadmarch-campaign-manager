@@ -357,80 +357,145 @@ function createRouteLayer(core) {
     });
   }
 
-  // DM4_HELPER_FUNCTION: createCurvedPath
-  // Generate a natural-looking curved path between two points
+  // DM4_HELPER_FUNCTION: createContinuousRoutePath
+  // Generate a smooth curved path for an entire route (not just segments)
   // Constants for curve generation
-  const MIN_CURVE_DISTANCE = 200;        // Minimum distance to apply curves
-  const CURVE_MAGNITUDE_RATIO = 0.10;    // Curve depth as percentage of distance
-  const HASH_MODULUS = 1000;             // Modulus for coordinate hash
-  const RANDOM_RANGE = 0.5;              // Range of random variation
-  const RANDOM_BASE_FACTOR = 0.75;       // Base factor for randomness (0.75 to 1.25)
+  const CURVE_MAGNITUDE_RATIO = 0.25;    // Curve depth as percentage of segment distance
+  const MIN_CURVE_DISTANCE = 100;        // Minimum distance to apply curves
   
-  function createCurvedPath(x1, y1, x2, y2) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+  function createContinuousRoutePath(points) {
+    if (!points || points.length < 2) return "";
     
-    // For very short routes, use straight lines
-    if (dist < MIN_CURVE_DISTANCE) {
-      return "M " + x1 + " " + y1 + " L " + x2 + " " + y2;
+    // Start at first point
+    var pathData = "M " + points[0][0] + " " + points[0][1];
+    
+    // For routes with only 2 points, use a simple quadratic curve
+    if (points.length === 2) {
+      var dx = points[1][0] - points[0][0];
+      var dy = points[1][1] - points[0][1];
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist < MIN_CURVE_DISTANCE) {
+        pathData += " L " + points[1][0] + " " + points[1][1];
+      } else {
+        // Create smooth curve with control point
+        var curveMagnitude = dist * CURVE_MAGNITUDE_RATIO;
+        var perpX = -dy / dist;
+        var perpY = dx / dist;
+        var midX = (points[0][0] + points[1][0]) / 2;
+        var midY = (points[0][1] + points[1][1]) / 2;
+        var cpX = midX + perpX * curveMagnitude;
+        var cpY = midY + perpY * curveMagnitude;
+        
+        pathData += " Q " + cpX + " " + cpY + " " + points[1][0] + " " + points[1][1];
+      }
+      return pathData;
     }
     
-    // Calculate curve control point offset perpendicular to the line
-    // Use a subtle curve for natural appearance
-    const curveMagnitude = dist * CURVE_MAGNITUDE_RATIO;
+    // For multi-segment routes, use smooth cubic bezier curves
+    for (var i = 1; i < points.length; i++) {
+      var p0 = i > 0 ? points[i - 1] : points[i];
+      var p1 = points[i];
+      var p2 = i < points.length - 1 ? points[i + 1] : points[i];
+      
+      var dx1 = p1[0] - p0[0];
+      var dy1 = p1[1] - p0[1];
+      var dx2 = p2[0] - p1[0];
+      var dy2 = p2[1] - p1[1];
+      
+      var dist1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+      var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+      
+      if (i === 1) {
+        // First segment: use quadratic curve
+        var perpX1 = -dy1 / dist1;
+        var perpY1 = dx1 / dist1;
+        var curveMag1 = dist1 * CURVE_MAGNITUDE_RATIO;
+        var cpX1 = (p0[0] + p1[0]) / 2 + perpX1 * curveMag1;
+        var cpY1 = (p0[1] + p1[1]) / 2 + perpY1 * curveMag1;
+        pathData += " Q " + cpX1 + " " + cpY1 + " " + p1[0] + " " + p1[1];
+      } else {
+        // Subsequent segments: use smooth cubic curves
+        var tangentX = (p2[0] - p0[0]) / 2;
+        var tangentY = (p2[1] - p0[1]) / 2;
+        
+        var cp1X = p0[0] + tangentX * 0.3;
+        var cp1Y = p0[1] + tangentY * 0.3;
+        var cp2X = p1[0] - tangentX * 0.3;
+        var cp2Y = p1[1] - tangentY * 0.3;
+        
+        pathData += " C " + cp1X + " " + cp1Y + " " + cp2X + " " + cp2Y + " " + p1[0] + " " + p1[1];
+      }
+    }
     
-    // Perpendicular vector (rotated 90 degrees)
-    const perpX = -dy / dist;
-    const perpY = dx / dist;
-    
-    // Add slight randomness based on coordinate hash for variety
-    const hash = (x1 + y1 + x2 + y2) % HASH_MODULUS;
-    const randomFactor = (hash / HASH_MODULUS) * RANDOM_RANGE + RANDOM_BASE_FACTOR;
-    
-    // Control point at midpoint, offset perpendicular to the line
-    const midX = (x1 + x2) / 2;
-    const midY = (y1 + y2) / 2;
-    const cpX = midX + perpX * curveMagnitude * randomFactor;
-    const cpY = midY + perpY * curveMagnitude * randomFactor;
-    
-    // Use quadratic bezier curve
-    return "M " + x1 + " " + y1 + " Q " + cpX + " " + cpY + " " + x2 + " " + y2;
+    return pathData;
   }
 
-  Object.keys(hyperlanes).forEach(function (routeName) {
-    if (routeName === "minor_routes") return;
+  // DM4_HELPER_FUNCTION: buildRouteSegments
+  // Collect all segments for each named route to create continuous paths
+  function buildRouteSegments() {
+    var routeSegments = {};
+    
+    Object.keys(hyperlanes).forEach(function (routeName) {
+      if (routeName === "minor_routes") return;
+      
+      var segments = hyperlanes[routeName] || [];
+      if (!segments.length) return;
+      
+      // Collect all points in order
+      var points = [];
+      var pointSet = {};
+      
+      segments.forEach(function (pair) {
+        if (!Array.isArray(pair) || pair.length < 2) return;
+        var fromCoords = getPointCoords(pair[0]);
+        var toCoords = getPointCoords(pair[1]);
+        if (!fromCoords || !toCoords) return;
+        
+        var fromKey = fromCoords[0] + "," + fromCoords[1];
+        var toKey = toCoords[0] + "," + toCoords[1];
+        
+        if (!pointSet[fromKey]) {
+          points.push({ coords: fromCoords, id: pair[0] });
+          pointSet[fromKey] = true;
+        }
+        if (!pointSet[toKey]) {
+          points.push({ coords: toCoords, id: pair[1] });
+          pointSet[toKey] = true;
+        }
+      });
+      
+      routeSegments[routeName] = {
+        points: points.map(function(p) { return p.coords; }),
+        systems: points.map(function(p) { return p.id; }),
+        meta: routeMeta[routeName] || {}
+      };
+    });
+    
+    return routeSegments;
+  }
 
-    const segments = hyperlanes[routeName] || [];
-    const meta = routeMeta[routeName] || {};
-    const cls = meta.route_class === "major" ? "route-major" : "route-medium";
-
-    segments.forEach(function (pair) {
-      if (!Array.isArray(pair) || pair.length < 2) return;
-      const from = pair[0];
-      const to = pair[1];
-
-      const fromCoords = getPointCoords(from);
-      const toCoords = getPointCoords(to);
-      if (!fromCoords || !toCoords) return;
-
-      const path = document.createElementNS(svgNS, "path");
-      const pathData = createCurvedPath(
-        fromCoords[0], fromCoords[1],
-        toCoords[0], toCoords[1]
-      );
-      path.setAttribute("d", pathData);
-
-      path.setAttribute("class", cls);
-      path.setAttribute("data-route-name", routeName);
-      path.setAttribute("data-from", from);
-      path.setAttribute("data-to", to);
-
-      svg.appendChild(path);
-      registerLine(path, from, to);
+  var routeSegments = buildRouteSegments();
+  
+  Object.keys(routeSegments).forEach(function (routeName) {
+    var route = routeSegments[routeName];
+    var cls = route.meta.route_class === "major" ? "route-major" : "route-medium";
+    
+    var path = document.createElementNS(svgNS, "path");
+    var pathData = createContinuousRoutePath(route.points);
+    path.setAttribute("d", pathData);
+    path.setAttribute("class", cls);
+    path.setAttribute("data-route-name", routeName);
+    
+    svg.appendChild(path);
+    
+    // Register path with all systems along the route
+    route.systems.forEach(function(systemId) {
+      registerLine(path, systemId, null);
     });
   });
 
+  // Render minor routes individually since they're not connected
   const minorList = hyperlanes.minor_routes || [];
   minorList.forEach(function (pair) {
     if (!Array.isArray(pair) || pair.length < 2) return;
@@ -442,10 +507,7 @@ function createRouteLayer(core) {
     if (!fromCoords || !toCoords) return;
 
     const path = document.createElementNS(svgNS, "path");
-    const pathData = createCurvedPath(
-      fromCoords[0], fromCoords[1],
-      toCoords[0], toCoords[1]
-    );
+    const pathData = createContinuousRoutePath([fromCoords, toCoords]);
     path.setAttribute("d", pathData);
 
     path.setAttribute("class", "route-minor");
@@ -464,37 +526,41 @@ function createRouteLayer(core) {
     edgesGroup.setAttribute("class", "dm4-routes-edges");
 
     edgeMarkers.forEach(function (m) {
-      const size = 14;
       const x = m.x;
       const y = m.y;
 
+      // Create cleaner arrow design
+      const arrowSize = 12;
+      const arrowWidth = 8;
       const arrow = document.createElementNS(svgNS, "path");
       arrow.setAttribute("class", "dm4-route-endpoint-arrow route-" + m.routeClass);
-      arrow.setAttribute(
-        "d",
-        "M " + (x - size / 2) + " " + (y + size / 2) +
-          " L " + (x + size / 2) + " " + (y + size / 2) +
-          " L " + x + " " + (y - size / 2) + " Z"
-      );
+      
+      // Triangle arrow pointing in the outward direction
+      var arrowPath = "M " + x + " " + (y - arrowSize / 2) + 
+                      " L " + (x + arrowWidth / 2) + " " + (y + arrowSize / 2) + 
+                      " L " + (x - arrowWidth / 2) + " " + (y + arrowSize / 2) + " Z";
+      arrow.setAttribute("d", arrowPath);
 
+      // Calculate rotation based on outward direction
       let angle = 0;
       if (m.outwardX === 0 && m.outwardY > 0) {
-        angle = 90;
-      } else if (m.outwardX === 0 && m.outwardY < 0) {
-        angle = -90;
-      } else if (m.outwardX > 0 && m.outwardY === 0) {
-        angle = 0;
-      } else if (m.outwardX < 0 && m.outwardY === 0) {
         angle = 180;
+      } else if (m.outwardX === 0 && m.outwardY < 0) {
+        angle = 0;
+      } else if (m.outwardX > 0 && m.outwardY === 0) {
+        angle = 90;
+      } else if (m.outwardX < 0 && m.outwardY === 0) {
+        angle = -90;
       }
 
       arrow.setAttribute("transform", "rotate(" + angle + " " + x + " " + y + ")");
 
+      // Route label with system label styling
       const label = document.createElementNS(svgNS, "text");
-      label.setAttribute("class", "dm4-route-endpoint-label dm-text-body");
+      label.setAttribute("class", "dm4-route-endpoint-label");
       label.textContent = m.routeId;
 
-      const labelOffset = 18;
+      const labelOffset = 24;
       let lx = x;
       let ly = y;
 

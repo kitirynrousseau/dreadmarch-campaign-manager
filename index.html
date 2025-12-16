@@ -222,15 +222,23 @@
     }
 
     .dm4-route-endpoint-arrow {
-      fill: none;
+      fill: var(--route-major-color);
+      stroke: none;
       vector-effect: non-scaling-stroke;
+      opacity: 0.9;
     }
 
     .dm4-route-endpoint-label {
       pointer-events: none;
       text-anchor: middle;
       dominant-baseline: middle;
-      font-size: var(--dm-font-small);
+      font-size: var(--dm-system-label-font);
+      font-weight: var(--dm-system-label-font-weight);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--label-color, #e6d2c8);
+      fill: var(--label-color, #e6d2c8);
+      filter: var(--sysLabelGlowBase);
     }
 .dm-panel {
       padding: 8px;

@@ -348,8 +348,8 @@
    * 1) CONFIG DEFAULTS & UTILITY FUNCTIONS
    ***********************/
   const DM4_DEFAULT_CONFIG = {
-    mapWidth: 4096,
-    mapHeight: 4096
+    mapWidth: 6000,
+    mapHeight: 6000
   };
 
   // DM4_HELPER_FUNCTION: debounce

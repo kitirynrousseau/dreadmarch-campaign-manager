@@ -133,7 +133,8 @@
       user-select: none;
     }
     .dm-layer-systems,
-    .dm-layer-routes {
+    .dm-layer-routes,
+    .dm-layer-grid {
       position: absolute;
       width: 6000px;
       height: 6000px;
@@ -214,6 +215,17 @@
       filter: drop-shadow(0 0 6px var(--selection-glow-color, #e46b24));
     }
     
+    .grid-major {
+      stroke: var(--grid-major-color);
+      stroke-width: var(--grid-major-width);
+      fill: none;
+    }
+    
+    .grid-label {
+      fill: var(--label-color);
+      font-size: 14px;
+      pointer-events: none;
+    }
 
     .dm4-routes-edges {
       pointer-events: none;

@@ -286,7 +286,7 @@ function createGridLayer(core) {
   var cw = cellSize[0];
   var ch = cellSize[1];
   
-  if (!x0 || !y0 || !cw || !ch) {
+  if (x0 === null || x0 === undefined || y0 === null || y0 === undefined || !cw || !ch) {
     DM4.Logger.warn("[GRID] Missing galactic_grid metadata, skipping grid render");
     return { element: svg, destroy: function() {} };
   }

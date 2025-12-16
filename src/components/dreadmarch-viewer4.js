@@ -41,6 +41,30 @@
     return DM4_MODES.indexOf(mode) !== -1;
   }
 
+  function applyStyleProfileForMode(mode) {
+    if (!isKnownMode(mode)) {
+      DM4.Logger.warn("[STYLE] Unknown mode:", mode, "- defaulting to navcom");
+      mode = "navcom";
+    }
+    
+    var profileLink = document.getElementById("dm-style-profile");
+    if (!profileLink) {
+      DM4.Logger.error("[STYLE] No style profile link element found");
+      return;
+    }
+    
+    var profiles = {
+      navcom: "src/styles/dm-style-palette-e2.css",
+      strategic: "src/styles/dm-style-palette-strategic.css"
+    };
+    
+    var newHref = profiles[mode] || profiles.navcom;
+    if (profileLink.href !== newHref) {
+      DM4.Logger.log("[STYLE] Switching style profile to:", mode);
+      profileLink.href = newHref;
+    }
+  }
+
   function runStyleContractChecks() {
     try {
       var root = document.documentElement;
@@ -116,17 +140,77 @@
     root.innerHTML = "";
     root.classList.add("dm4-root-shell");
 
+    DM4.Logger.log("[BOOTSTRAP] Building top bar with dataset selector");
+    
+    // Top bar above the three-column layout
     var topBar = document.createElement("div");
     topBar.classList.add("dm-top-bar");
-    var topBarTitle = document.createElement("div");
-    topBarTitle.classList.add("dm-top-bar-title", "dm-text-title");
-    topBarTitle.textContent = "DREADMARCH CAMPAIGN MANAGER";
+
+    // Dataset selector (host-driven, optional)
+    var datasetContainer = document.createElement("div");
+    datasetContainer.classList.add("dm-top-bar-datasets", "dm-text-small", "dm-text-header");
+
+    var datasetLabel = document.createElement("span");
+    datasetLabel.textContent = "Dataset:";
+
+    var datasetSelect = document.createElement("select");
+    datasetSelect.classList.add("dm-top-bar-dataset-select");
+
+    // Populate dropdown options from host-provided DM4_DATASETS
+    try {
+      if (typeof window !== "undefined" && window.DM4_DATASETS) {
+        var dsMap = window.DM4_DATASETS;
+        Object.keys(dsMap).forEach(function (id) {
+          var meta = dsMap[id] && dsMap[id].dataset_metadata;
+          var label = (meta && (meta.display_name || meta.name)) || id;
+          var opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = label;
+          datasetSelect.appendChild(opt);
+        });
+        
+        // Set current selection if available
+        if (window.DM4_CURRENT_DATASET_ID) {
+          datasetSelect.value = window.DM4_CURRENT_DATASET_ID;
+        }
+      }
+    } catch (e) {
+      DM4.Logger.warn("[BOOTSTRAP] Failed to build dataset selector from DM4_DATASETS:", e);
+    }
+
+    datasetSelect.addEventListener("change", function () {
+      var id = datasetSelect.value;
+      DM4.Logger.log("[BOOTSTRAP] Dataset selector changed to:", id);
+      try {
+        if (window && typeof window.DM4_startViewerWithDataset === "function") {
+          window.DM4_startViewerWithDataset(id);
+        }
+      } catch (e) {
+        DM4.Logger.error("[BOOTSTRAP] Failed to switch dataset via DM4_startViewerWithDataset:", e);
+      }
+    });
+
+    datasetContainer.appendChild(datasetLabel);
+    datasetContainer.appendChild(datasetSelect);
+
+    // Title container
+    var topTitle = document.createElement("div");
+    topTitle.classList.add("dm-top-bar-title", "dm-text-title");
+    topTitle.textContent = "Dreadmarch Strategic Command Overview - ISNI Deployment Model 4.0";
+
+    // Coordinates display
     var topBarCoords = document.createElement("div");
     topBarCoords.classList.add("dm-top-bar-coords", "dm-text-body");
     topBarCoords.textContent = "Parsec Coordinates: ---";
-    topBar.appendChild(topBarTitle);
+
+    // Assemble top bar
+    topBar.appendChild(datasetContainer);
+    topBar.appendChild(topTitle);
     topBar.appendChild(topBarCoords);
+
     root.appendChild(topBar);
+    
+    // Store reference for coordinate updates
     core.topBarCoords = topBarCoords;
 
     var mainLayout = document.createElement("div");
@@ -142,42 +226,62 @@
     mainLayout.appendChild(rightCol);
     root.appendChild(mainLayout);
 
+    // Initialize map layer (CALL MODULAR FUNCTION)
     try {
       if (!window.DM4 || !DM4.map || typeof DM4.map.initMapLayer !== "function") {
-        throw new Error("DM4.map.initMapLayer not available");
+        throw new Error("DM4.map.initMapLayer not available - dm4-map-layers.js not loaded?");
       }
+      DM4.Logger.log("[BOOTSTRAP] Initializing map layers from dm4-map-layers.js");
       DM4.map.initMapLayer(core, centerCol);
+      DM4.Logger.log("[BOOTSTRAP] Map layers initialized");
     } catch (err) {
       DM4.Logger.error("[BOOTSTRAP] Failed to initialize map:", err);
       throw err;
     }
 
+    // Initialize panel registry (CALL MODULAR FUNCTION)
     var panelRegistry;
     try {
       if (!window.DM4 || !DM4.panels || !DM4.panels.registry || 
           typeof DM4.panels.registry.createPanelRegistry !== "function") {
         throw new Error("DM4.panels.registry.createPanelRegistry not available");
       }
+      DM4.Logger.log("[BOOTSTRAP] Creating panel registry from dm4-panels-registry.js");
       panelRegistry = DM4.panels.registry.createPanelRegistry(core, rightCol);
       core.panelRegistry = panelRegistry;
+      DM4.Logger.log("[BOOTSTRAP] Panel registry created");
     } catch (err) {
       DM4.Logger.error("[BOOTSTRAP] Failed to create panel registry:", err);
       throw err;
     }
 
+    // Initialize control bar (CALL MODULAR FUNCTION)
     try {
       if (!window.DM4 || !DM4.ui || typeof DM4.ui.initControlBar !== "function") {
         throw new Error("DM4.ui.initControlBar not available");
       }
+      DM4.Logger.log("[BOOTSTRAP] Initializing control bar from dm4-ui-controlbar.js");
       DM4.ui.initControlBar(core, leftCol, panelRegistry);
+      DM4.Logger.log("[BOOTSTRAP] Control bar initialized");
     } catch (err) {
       DM4.Logger.error("[BOOTSTRAP] Failed to initialize control bar:", err);
       throw err;
     }
 
+    // Activate default panel
     if (panelRegistry && typeof panelRegistry.activatePanel === "function") {
+      DM4.Logger.log("[BOOTSTRAP] Activating default identity panel");
       panelRegistry.activatePanel("identity");
     }
+
+    // Apply initial style profile and update on mode changes
+    DM4.Logger.log("[BOOTSTRAP] Applying style profile for mode:", state.getState().mode || "navcom");
+    applyStyleProfileForMode(state.getState().mode || "navcom");
+    state.subscribe(function (st) {
+      if (st && st.mode) {
+        applyStyleProfileForMode(st.mode);
+      }
+    });
 
     if (DM4_DEBUG) {
       runStyleContractChecks();

@@ -112,10 +112,11 @@ npm run test:coverage
 
 When adding new features or fixing bugs:
 
-1. **Create test files** in the `__tests__/` directory
+1. **Create test files** in the `src/tests/` directory
 2. **Follow the naming convention**: `module-name.test.js`
-3. **Use descriptive test names** that explain what is being tested
-4. **Follow the Arrange-Act-Assert pattern**:
+3. **Import modules** from their new locations in `src/core/`, `src/components/`, or `src/utils/`
+4. **Use descriptive test names** that explain what is being tested
+5. **Follow the Arrange-Act-Assert pattern**:
    ```javascript
    test('should do something specific', () => {
      // Arrange - Set up test data and conditions
@@ -144,9 +145,30 @@ Browser modules use the IIFE (Immediately Invoked Function Expression) pattern a
 
 - Set up `global.window` in `beforeAll`, not `beforeEach`
 - Clean up in `afterAll`, not `afterEach`
-- See existing tests in `__tests__/` for examples
+- See existing tests in `src/tests/` for examples
 
 ## Development Standards
+
+### File Organization
+
+The repository follows a clear directory structure:
+
+```
+src/
+├── core/          # Core application logic and state management
+├── components/    # UI components (panels, controls, map layers)
+├── utils/         # Utility functions (style helpers, etc.)
+├── tests/         # Test files
+└── styles/        # CSS stylesheets
+```
+
+#### When Creating New Files
+
+- **Core modules**: Place in `src/core/` if it's fundamental to app operation
+- **UI components**: Place in `src/components/` for panels, UI controls, or visual elements
+- **Utilities**: Place in `src/utils/` for helper functions
+- **Tests**: Place in `src/tests/` with a `.test.js` suffix
+- **Styles**: Place in `src/styles/` with kebab-case naming
 
 ### Code Style
 
@@ -165,6 +187,14 @@ Browser modules use the IIFE (Immediately Invoked Function Expression) pattern a
 
 #### Naming Conventions
 
+**Files:**
+- **Core modules**: `dm4-module-name.js` (e.g., `dm4-state.js`, `dm4-logger.js`)
+- **Panel components**: `dm4-panels-name.js` (e.g., `dm4-panels-identity.js`)
+- **UI components**: `dm4-ui-name.js` (e.g., `dm4-ui-controlbar.js`)
+- **Tests**: `module-name.test.js` (e.g., `dm4-state.test.js`)
+- **Stylesheets**: `kebab-case.css` (e.g., `dm-style-palette-e2.css`)
+
+**Code:**
 - **Variables and functions**: `camelCase`
 - **Constants**: `UPPER_SNAKE_CASE` (e.g., `DM4_DEBUG`)
 - **Function prefixes**:

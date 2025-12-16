@@ -16,34 +16,36 @@ The viewer is built on a modular architecture with the following core modules:
 
 ### Core Modules
 
-- **dm4-runtime.js**: Establishes the DM4 namespace and core configuration
-- **dm4-logger.js**: Centralized logging utility (see below)
-- **dm4-dataset-core.js**: Dataset normalization and validation
-- **dm4-state.js**: Application state manager with scoped subscriptions
-- **dm4-style-core.js**: Style contract enforcement and validation
-- **dm4-map-layers.js**: Map rendering (systems, labels, routes, graticule)
-- **dm4-panels-registry.js**: Panel lifecycle management
-- **dm4-panels-editor.js**: Dataset editing and DB5 patch system
-- **dm4-ui-controlbar.js**: Top-level control bar UI
-- **dreadmarch-viewer4.js**: Main viewer bootstrap and integration
+All modules are now organized in the `src/` directory:
+
+- **src/core/dm4-runtime.js**: Establishes the DM4 namespace and core configuration
+- **src/core/dm4-logger.js**: Centralized logging utility (see below)
+- **src/core/dm4-dataset-core.js**: Dataset normalization and validation
+- **src/core/dm4-state.js**: Application state manager with scoped subscriptions
+- **src/utils/dm4-style-core.js**: Style contract enforcement and validation
+- **src/components/dm4-map-layers.js**: Map rendering (systems, labels, routes, graticule)
+- **src/components/dm4-panels-registry.js**: Panel lifecycle management
+- **src/components/dm4-panels-editor.js**: Dataset editing and DB5 patch system
+- **src/components/dm4-ui-controlbar.js**: Top-level control bar UI
+- **src/components/dreadmarch-viewer4.js**: Main viewer bootstrap and integration
 
 ### Module Loading Order
 
 Modules must be loaded in the following order (enforced in `index.html`):
 
-1. dm4-runtime.js
-2. dm4-logger.js
-3. dm4-dataset-core.js
-4. dm4-dataset-main.js
-5. dm4-style-core.js
-6. dm4-state.js
-7. dm4-map-layers.js
-8. dm4-panels-identity.js
-9. dm4-panels-test.js
-10. dm4-panels-registry.js
-11. dm4-panels-editor.js
-12. dm4-ui-controlbar.js
-13. dreadmarch-viewer4.js
+1. src/core/dm4-runtime.js
+2. src/core/dm4-logger.js
+3. src/core/dm4-dataset-core.js
+4. src/core/dm4-dataset-main.js
+5. src/utils/dm4-style-core.js
+6. src/core/dm4-state.js
+7. src/components/dm4-map-layers.js
+8. src/components/dm4-panels-identity.js
+9. src/components/dm4-panels-test.js
+10. src/components/dm4-panels-registry.js
+11. src/components/dm4-panels-editor.js
+12. src/components/dm4-ui-controlbar.js
+13. src/components/dreadmarch-viewer4.js
 
 ## Logging Standards
 
@@ -257,16 +259,16 @@ Coverage reports will be generated in the `coverage/` directory.
 
 ### Test Structure
 
-Tests are located in the `__tests__/` directory and follow the naming convention `*.test.js`.
+Tests are located in the `src/tests/` directory and follow the naming convention `*.test.js`.
 
 Current test coverage includes:
 
-- **dm4-dataset-core.test.js**: Tests for dataset normalization functionality
+- **src/tests/dm4-dataset-core.test.js**: Tests for dataset normalization functionality
   - Valid dataset normalization with systems, pixels, grids, and sectors
   - Invalid input handling (null, undefined, non-objects)
   - Edge cases (null values, multiple sectors, empty arrays)
 
-- **dm4-state.test.js**: Tests for state manager behavior
+- **src/tests/dm4-state.test.js**: Tests for state manager behavior
   - State manager creation and initialization
   - Subscribe and notify patterns
   - State actions (selectSystem, setMode, setDataset, setCampaign, setAccess)
@@ -277,8 +279,8 @@ Current test coverage includes:
 
 When adding new features:
 
-1. Create a test file in `__tests__/` with the `.test.js` extension
-2. Import or require the module you want to test
+1. Create a test file in `src/tests/` with the `.test.js` extension
+2. Import or require the module you want to test from `src/core/`, `src/components/`, or `src/utils/`
 3. Write test cases using Jest's `describe` and `test` functions
 4. Run tests to ensure they pass
 
@@ -325,32 +327,50 @@ describe('My Module', () => {
 
 ## Project Structure
 
+The repository is organized into a clear directory structure for improved maintainability:
+
 ```
 .
-├── __tests__/                  # Test files
-│   ├── dm4-dataset-core.test.js
-│   └── dm4-state.test.js
+├── src/                        # Source code
+│   ├── core/                   # Core application logic
+│   │   ├── dm4-runtime.js      # Runtime initialization
+│   │   ├── dm4-logger.js       # Centralized logging
+│   │   ├── dm4-dataset-core.js # Dataset normalization
+│   │   ├── dm4-dataset-main.js # Main dataset definitions
+│   │   └── dm4-state.js        # State management
+│   ├── components/             # UI Components
+│   │   ├── dm4-panels-identity.js  # System identity panel
+│   │   ├── dm4-panels-editor.js    # Dataset editor panel
+│   │   ├── dm4-panels-test.js      # Test panel
+│   │   ├── dm4-panels-registry.js  # Panel management
+│   │   ├── dm4-ui-controlbar.js    # Control bar UI
+│   │   ├── dm4-map-layers.js       # Map layer rendering
+│   │   └── dreadmarch-viewer4.js   # Main application
+│   ├── utils/                  # Utility functions
+│   │   └── dm4-style-core.js   # Style and palette management
+│   ├── tests/                  # Test files
+│   │   ├── dm4-dataset-core.test.js
+│   │   ├── dm4-state.test.js
+│   │   └── dm4-state-test.html
+│   └── styles/                 # CSS stylesheets
+│       └── dm-style-palette-e2.css
 ├── docs/                       # Documentation
 │   └── architecture.md         # Architecture overview
-├── dm4-runtime.js              # Core runtime initialization
-├── dm4-dataset-core.js         # Dataset normalization module
-├── dm4-dataset-main.js         # Main dataset definitions
-├── dm4-state.js                # State management module
-├── dm4-map-layers.js           # Map layer rendering
-├── dm4-panels-*.js             # UI panel components
-│   ├── dm4-panels-identity.js  # System identity panel
-│   ├── dm4-panels-editor.js    # Dataset editor panel
-│   ├── dm4-panels-test.js      # Test panel
-│   └── dm4-panels-registry.js  # Panel management
-├── dm4-style-core.js           # Style and palette management
-├── dm4-ui-controlbar.js        # Control bar UI
-├── dreadmarch-viewer4.js       # Main application bootstrap
+├── archive/                    # Archived legacy files
 ├── index.html                  # Application entry point
 ├── package.json                # Project configuration
 ├── jest.config.js              # Jest configuration
 ├── CONTRIBUTING.md             # Contribution guidelines
 └── README.md                   # This file
 ```
+
+### File Naming Conventions
+
+- **Core modules**: `dm4-*.js` prefix for core functionality
+- **Components**: `dm4-panels-*.js` for panel components, `dm4-ui-*.js` for UI controls
+- **Tests**: `*.test.js` suffix for test files
+- **Styles**: `kebab-case.css` for stylesheets
+
 
 ## Contributing
 

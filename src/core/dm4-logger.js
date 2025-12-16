@@ -70,6 +70,19 @@
         }
       }
       return undefined;
+    },
+
+    /**
+     * Validate a condition and log warning if invalid
+     * @param {boolean} condition - Condition to validate
+     * @param {string} message - Message to log if invalid
+     * @returns {boolean} The condition result
+     */
+    validate: function (condition, message) {
+      if (!condition) {
+        this.warn("Validation failed: " + message);
+      }
+      return condition;
     }
   };
 

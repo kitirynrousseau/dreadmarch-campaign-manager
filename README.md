@@ -7,6 +7,7 @@ A modular, offline-capable galactic campaign viewer and editor for Star Wars tab
 - **Interactive Galactic Map**: Browse star systems, hyperlanes, and sectors
 - **Campaign State Management**: Track faction control, actors, and resources
 - **Live Editor**: Make changes to the dataset and export patches
+- **Dataset Normalization**: Robust handling of galactic system data with intelligent caching and optional Web Worker offloading for large datasets
 - **Style Contracts**: Enforce consistent UI styling across all panels
 - **Modular Architecture**: Clean separation between state, UI, map, and editor concerns
 
@@ -19,8 +20,9 @@ The viewer is built on a modular architecture with the following core modules:
 All modules are now organized in the `src/` directory:
 
 - **src/core/dm4-runtime.js**: Establishes the DM4 namespace and core configuration
-- **src/core/dm4-logger.js**: Centralized logging utility (see below)
-- **src/core/dm4-dataset-core.js**: Dataset normalization and validation
+- **src/core/dm4-logger.js**: Centralized logging utility with validate() method
+- **src/core/dm4-dataset-core.js**: Dataset normalization with caching & Web Worker support
+- **src/core/dataset-normalizer.worker.js**: Web Worker for async dataset normalization
 - **src/core/dm4-state.js**: Application state manager with scoped subscriptions
 - **src/utils/dm4-style-core.js**: Style contract enforcement and validation
 - **src/components/dm4-map-layers.js**: Map rendering (systems, labels, routes, graticule)
@@ -286,6 +288,10 @@ When adding new features:
 
 Jest configuration is managed in `jest.config.js` at the root of the project.
 
+### API Documentation
+
+- **Dataset Normalization API** - Comprehensive guide to the enhanced dataset normalization system including caching, Web Worker support, error handling, and performance considerations. See [docs/dataset-normalization-api.md](docs/dataset-normalization-api.md)
+
 Example test structure:
 
 ```javascript
@@ -334,8 +340,9 @@ The repository is organized into a clear directory structure for improved mainta
 ├── src/                        # Source code
 │   ├── core/                   # Core application logic
 │   │   ├── dm4-runtime.js      # Runtime initialization
-│   │   ├── dm4-logger.js       # Centralized logging
-│   │   ├── dm4-dataset-core.js # Dataset normalization
+│   │   ├── dm4-logger.js       # Centralized logging (with validate method)
+│   │   ├── dm4-dataset-core.js # Dataset normalization (with caching & Web Worker)
+│   │   ├── dataset-normalizer.worker.js  # Web Worker for async normalization
 │   │   ├── dm4-dataset-main.js # Main dataset definitions
 │   │   └── dm4-state.js        # State management
 │   ├── components/             # UI Components
@@ -350,12 +357,15 @@ The repository is organized into a clear directory structure for improved mainta
 │   │   └── dm4-style-core.js   # Style and palette management
 │   ├── tests/                  # Test files
 │   │   ├── dm4-dataset-core.test.js
+│   │   ├── dm4-dataset-core-enhanced.test.js
+│   │   ├── dm4-dataset-core-integration.test.js
 │   │   ├── dm4-state.test.js
 │   │   └── dm4-state-test.html
 │   └── styles/                 # CSS stylesheets
 │       └── dm-style-palette-e2.css
 ├── docs/                       # Documentation
-│   └── architecture.md         # Architecture overview
+│   ├── architecture.md         # Architecture overview
+│   └── dataset-normalization-api.md  # Dataset normalization API docs
 ├── archive/                    # Archived legacy files
 ├── index.html                  # Application entry point
 ├── package.json                # Project configuration

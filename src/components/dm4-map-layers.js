@@ -357,74 +357,78 @@ function createRouteLayer(core) {
     });
   }
 
-  // DM4_HELPER_FUNCTION: createContinuousRoutePath
-  // Generate a smooth curved path for an entire route (not just segments)
+  // DM4_HELPER_FUNCTION: createStraightRoutePath
+  // Generate a straight line path for routes (medium/minor)
+  function createStraightRoutePath(points) {
+    if (!points || points.length < 2) return "";
+    
+    var pathData = "M " + points[0][0] + " " + points[0][1];
+    for (var i = 1; i < points.length; i++) {
+      pathData += " L " + points[i][0] + " " + points[i][1];
+    }
+    return pathData;
+  }
+
+  // DM4_HELPER_FUNCTION: createCurvedRoutePath
+  // Generate dramatically curved paths for major routes
   // Constants for curve generation
-  const CURVE_MAGNITUDE_RATIO = 0.25;    // Curve depth as percentage of segment distance
-  const MIN_CURVE_DISTANCE = 100;        // Minimum distance to apply curves
+  const CURVE_OFFSET_PIXELS = 50;    // Fixed offset in pixels for visible curves
+  const MIN_CURVE_DISTANCE = 150;     // Minimum distance to apply curves
   
-  function createContinuousRoutePath(points) {
+  function createCurvedRoutePath(points) {
     if (!points || points.length < 2) return "";
     
     // Start at first point
     var pathData = "M " + points[0][0] + " " + points[0][1];
     
-    // For routes with only 2 points, use a simple quadratic curve
+    // For routes with only 2 points, create a single dramatic curve
     if (points.length === 2) {
       var dx = points[1][0] - points[0][0];
       var dy = points[1][1] - points[0][1];
       var dist = Math.sqrt(dx * dx + dy * dy);
       
       if (dist < MIN_CURVE_DISTANCE) {
+        // Too short for curves, use straight line
         pathData += " L " + points[1][0] + " " + points[1][1];
       } else {
-        // Create smooth curve with control point
-        var curveMagnitude = dist * CURVE_MAGNITUDE_RATIO;
+        // Create dramatic curve perpendicular to the line
         var perpX = -dy / dist;
         var perpY = dx / dist;
         var midX = (points[0][0] + points[1][0]) / 2;
         var midY = (points[0][1] + points[1][1]) / 2;
-        var cpX = midX + perpX * curveMagnitude;
-        var cpY = midY + perpY * curveMagnitude;
+        
+        // Use fixed pixel offset for consistent visual curves
+        var cpX = midX + perpX * CURVE_OFFSET_PIXELS;
+        var cpY = midY + perpY * CURVE_OFFSET_PIXELS;
         
         pathData += " Q " + cpX + " " + cpY + " " + points[1][0] + " " + points[1][1];
       }
       return pathData;
     }
     
-    // For multi-segment routes, use smooth cubic bezier curves
+    // For multi-segment routes, create smooth flowing curves between each segment
     for (var i = 1; i < points.length; i++) {
-      var p0 = i > 0 ? points[i - 1] : points[i];
+      var p0 = points[i - 1];
       var p1 = points[i];
-      var p2 = i < points.length - 1 ? points[i + 1] : points[i];
       
-      var dx1 = p1[0] - p0[0];
-      var dy1 = p1[1] - p0[1];
-      var dx2 = p2[0] - p1[0];
-      var dy2 = p2[1] - p1[1];
+      var dx = p1[0] - p0[0];
+      var dy = p1[1] - p0[1];
+      var dist = Math.sqrt(dx * dx + dy * dy);
       
-      var dist1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
-      var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-      
-      if (i === 1) {
-        // First segment: use quadratic curve
-        var perpX1 = -dy1 / dist1;
-        var perpY1 = dx1 / dist1;
-        var curveMag1 = dist1 * CURVE_MAGNITUDE_RATIO;
-        var cpX1 = (p0[0] + p1[0]) / 2 + perpX1 * curveMag1;
-        var cpY1 = (p0[1] + p1[1]) / 2 + perpY1 * curveMag1;
-        pathData += " Q " + cpX1 + " " + cpY1 + " " + p1[0] + " " + p1[1];
+      if (dist < MIN_CURVE_DISTANCE) {
+        // Too short, use straight line
+        pathData += " L " + p1[0] + " " + p1[1];
       } else {
-        // Subsequent segments: use smooth cubic curves
-        var tangentX = (p2[0] - p0[0]) / 2;
-        var tangentY = (p2[1] - p0[1]) / 2;
+        // Create visible curve with perpendicular offset
+        var perpX = -dy / dist;
+        var perpY = dx / dist;
+        var midX = (p0[0] + p1[0]) / 2;
+        var midY = (p0[1] + p1[1]) / 2;
         
-        var cp1X = p0[0] + tangentX * 0.3;
-        var cp1Y = p0[1] + tangentY * 0.3;
-        var cp2X = p1[0] - tangentX * 0.3;
-        var cp2Y = p1[1] - tangentY * 0.3;
+        var cpX = midX + perpX * CURVE_OFFSET_PIXELS;
+        var cpY = midY + perpY * CURVE_OFFSET_PIXELS;
         
-        pathData += " C " + cp1X + " " + cp1Y + " " + cp2X + " " + cp2Y + " " + p1[0] + " " + p1[1];
+        pathData += " Q " + cpX + " " + cpY + " " + p1[0] + " " + p1[1];
       }
     }
     
@@ -482,7 +486,10 @@ function createRouteLayer(core) {
     var cls = route.meta.route_class === "major" ? "route-major" : "route-medium";
     
     var path = document.createElementNS(svgNS, "path");
-    var pathData = createContinuousRoutePath(route.points);
+    // Use curved paths for major routes, straight for others
+    var pathData = route.meta.route_class === "major" 
+      ? createCurvedRoutePath(route.points)
+      : createStraightRoutePath(route.points);
     path.setAttribute("d", pathData);
     path.setAttribute("class", cls);
     path.setAttribute("data-route-name", routeName);
@@ -495,7 +502,7 @@ function createRouteLayer(core) {
     });
   });
 
-  // Render minor routes individually since they're not connected
+  // Render minor routes individually since they're not connected - use straight lines
   const minorList = hyperlanes.minor_routes || [];
   minorList.forEach(function (pair) {
     if (!Array.isArray(pair) || pair.length < 2) return;
@@ -507,7 +514,7 @@ function createRouteLayer(core) {
     if (!fromCoords || !toCoords) return;
 
     const path = document.createElementNS(svgNS, "path");
-    const pathData = createContinuousRoutePath([fromCoords, toCoords]);
+    const pathData = createStraightRoutePath([fromCoords, toCoords]);
     path.setAttribute("d", pathData);
 
     path.setAttribute("class", "route-minor");

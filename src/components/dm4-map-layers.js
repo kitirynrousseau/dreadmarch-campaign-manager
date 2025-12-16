@@ -357,152 +357,75 @@ function createRouteLayer(core) {
     });
   }
 
-  // DM4_HELPER_FUNCTION: createStraightRoutePath
-  // Generate a straight line path for routes (medium/minor)
-  function createStraightRoutePath(points) {
-    if (!points || points.length < 2) return "";
+  // DM4_HELPER_FUNCTION: createCurvedPath
+  // Generate a natural-looking curved path between two points
+  function createCurvedPath(x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.sqrt(dx * dx + dy * dy);
     
-    var pathData = "M " + points[0][0] + " " + points[0][1];
-    for (var i = 1; i < points.length; i++) {
-      pathData += " L " + points[i][0] + " " + points[i][1];
-    }
-    return pathData;
-  }
-
-  // DM4_HELPER_FUNCTION: createCurvedRoutePath
-  // Generate dramatically curved paths for major routes
-  // Constants for curve generation
-  const CURVE_OFFSET_PIXELS = 150;    // Fixed offset in pixels for VERY visible curves
-  const MIN_CURVE_DISTANCE = 100;     // Minimum distance to apply curves
-  
-  function createCurvedRoutePath(points) {
-    if (!points || points.length < 2) return "";
-    
-    // Start at first point
-    var pathData = "M " + points[0][0] + " " + points[0][1];
-    
-    // For routes with only 2 points, create a single dramatic curve
-    if (points.length === 2) {
-      var dx = points[1][0] - points[0][0];
-      var dy = points[1][1] - points[0][1];
-      var dist = Math.sqrt(dx * dx + dy * dy);
-      
-      if (dist < MIN_CURVE_DISTANCE) {
-        // Too short for curves, use straight line
-        pathData += " L " + points[1][0] + " " + points[1][1];
-      } else {
-        // Create dramatic curve perpendicular to the line
-        var perpX = -dy / dist;
-        var perpY = dx / dist;
-        var midX = (points[0][0] + points[1][0]) / 2;
-        var midY = (points[0][1] + points[1][1]) / 2;
-        
-        // Use fixed pixel offset for consistent visual curves
-        var cpX = midX + perpX * CURVE_OFFSET_PIXELS;
-        var cpY = midY + perpY * CURVE_OFFSET_PIXELS;
-        
-        pathData += " Q " + cpX + " " + cpY + " " + points[1][0] + " " + points[1][1];
-      }
-      return pathData;
+    // For very short routes, use straight lines
+    if (dist < 200) {
+      return "M " + x1 + " " + y1 + " L " + x2 + " " + y2;
     }
     
-    // For multi-segment routes, create smooth flowing curves between each segment
-    for (var i = 1; i < points.length; i++) {
-      var p0 = points[i - 1];
-      var p1 = points[i];
-      
-      var dx = p1[0] - p0[0];
-      var dy = p1[1] - p0[1];
-      var dist = Math.sqrt(dx * dx + dy * dy);
-      
-      if (dist < MIN_CURVE_DISTANCE) {
-        // Too short, use straight line
-        pathData += " L " + p1[0] + " " + p1[1];
-      } else {
-        // Create visible curve with perpendicular offset
-        var perpX = -dy / dist;
-        var perpY = dx / dist;
-        var midX = (p0[0] + p1[0]) / 2;
-        var midY = (p0[1] + p1[1]) / 2;
-        
-        var cpX = midX + perpX * CURVE_OFFSET_PIXELS;
-        var cpY = midY + perpY * CURVE_OFFSET_PIXELS;
-        
-        pathData += " Q " + cpX + " " + cpY + " " + p1[0] + " " + p1[1];
-      }
-    }
+    // Calculate curve control point offset perpendicular to the line
+    // Use a subtle curve (10% of distance) for natural appearance
+    const curveMagnitude = dist * 0.10;
     
-    return pathData;
+    // Perpendicular vector (rotated 90 degrees)
+    const perpX = -dy / dist;
+    const perpY = dx / dist;
+    
+    // Add slight randomness based on coordinate hash for variety
+    const hash = (x1 + y1 + x2 + y2) % 1000;
+    const randomFactor = (hash / 1000) * 0.5 + 0.75; // Range: 0.75 to 1.25
+    
+    // Control point at midpoint, offset perpendicular to the line
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+    const cpX = midX + perpX * curveMagnitude * randomFactor;
+    const cpY = midY + perpY * curveMagnitude * randomFactor;
+    
+    // Use quadratic bezier curve
+    return "M " + x1 + " " + y1 + " Q " + cpX + " " + cpY + " " + x2 + " " + y2;
   }
 
-  // DM4_HELPER_FUNCTION: buildRouteSegments
-  // Collect all segments for each named route to create continuous paths
-  function buildRouteSegments() {
-    var routeSegments = {};
-    
-    Object.keys(hyperlanes).forEach(function (routeName) {
-      if (routeName === "minor_routes") return;
-      
-      var segments = hyperlanes[routeName] || [];
-      if (!segments.length) return;
-      
-      // Collect all points in order
-      var points = [];
-      var pointSet = {};
-      
-      segments.forEach(function (pair) {
-        if (!Array.isArray(pair) || pair.length < 2) return;
-        var fromCoords = getPointCoords(pair[0]);
-        var toCoords = getPointCoords(pair[1]);
-        if (!fromCoords || !toCoords) return;
-        
-        var fromKey = fromCoords[0] + "," + fromCoords[1];
-        var toKey = toCoords[0] + "," + toCoords[1];
-        
-        if (!pointSet[fromKey]) {
-          points.push({ coords: fromCoords, id: pair[0] });
-          pointSet[fromKey] = true;
-        }
-        if (!pointSet[toKey]) {
-          points.push({ coords: toCoords, id: pair[1] });
-          pointSet[toKey] = true;
-        }
-      });
-      
-      routeSegments[routeName] = {
-        points: points.map(function(p) { return p.coords; }),
-        systems: points.map(function(p) { return p.id; }),
-        meta: routeMeta[routeName] || {}
-      };
-    });
-    
-    return routeSegments;
-  }
+  // Render major and medium routes (per-segment with curves)
+  Object.keys(hyperlanes).forEach(function (routeName) {
+    if (routeName === "minor_routes") return;
 
-  var routeSegments = buildRouteSegments();
-  
-  Object.keys(routeSegments).forEach(function (routeName) {
-    var route = routeSegments[routeName];
-    var cls = route.meta.route_class === "major" ? "route-major" : "route-medium";
-    
-    var path = document.createElementNS(svgNS, "path");
-    // Use curved paths for major routes, straight for others
-    var pathData = route.meta.route_class === "major" 
-      ? createCurvedRoutePath(route.points)
-      : createStraightRoutePath(route.points);
-    path.setAttribute("d", pathData);
-    path.setAttribute("class", cls);
-    path.setAttribute("data-route-name", routeName);
-    
-    svg.appendChild(path);
-    
-    // Register path with all systems along the route
-    route.systems.forEach(function(systemId) {
-      registerLine(path, systemId, null);
+    const segments = hyperlanes[routeName] || [];
+    const meta = routeMeta[routeName] || {};
+    const cls = meta.route_class === "major" ? "route-major" : "route-medium";
+
+    segments.forEach(function (pair) {
+      if (!Array.isArray(pair) || pair.length < 2) return;
+      const from = pair[0];
+      const to = pair[1];
+
+      const fromCoords = getPointCoords(from);
+      const toCoords = getPointCoords(to);
+      if (!fromCoords || !toCoords) return;
+
+      const path = document.createElementNS(svgNS, "path");
+      const pathData = createCurvedPath(
+        fromCoords[0], fromCoords[1],
+        toCoords[0], toCoords[1]
+      );
+      path.setAttribute("d", pathData);
+
+      path.setAttribute("class", cls);
+      path.setAttribute("data-route-name", routeName);
+      path.setAttribute("data-from", from);
+      path.setAttribute("data-to", to);
+
+      svg.appendChild(path);
+      registerLine(path, from, to);
     });
   });
 
-  // Render minor routes individually since they're not connected - use straight lines
+  // Render minor routes
   const minorList = hyperlanes.minor_routes || [];
   minorList.forEach(function (pair) {
     if (!Array.isArray(pair) || pair.length < 2) return;
@@ -514,7 +437,10 @@ function createRouteLayer(core) {
     if (!fromCoords || !toCoords) return;
 
     const path = document.createElementNS(svgNS, "path");
-    const pathData = createStraightRoutePath([fromCoords, toCoords]);
+    const pathData = createCurvedPath(
+      fromCoords[0], fromCoords[1],
+      toCoords[0], toCoords[1]
+    );
     path.setAttribute("d", pathData);
 
     path.setAttribute("class", "route-minor");

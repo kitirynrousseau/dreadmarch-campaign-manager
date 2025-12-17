@@ -700,6 +700,215 @@ function createRouteLayer(core) {
     svg.appendChild(edgesGroup);
   }
 
+  // DM4_HELPER_FUNCTION: Route hover detection and labeling
+  var routeHoverData = [];
+  var currentHoveredRoute = null;
+  var currentRouteLabel = null;
+  var HOVER_PROXIMITY_THRESHOLD = 50;
+
+  // Build route hover data structure (major and medium routes only)
+  Object.keys(hyperlanes).forEach(function (routeName) {
+    if (routeName === "minor_routes") return;
+    
+    var segments = hyperlanes[routeName] || [];
+    var meta = routeMeta[routeName] || {};
+    var routeClass = meta.route_class || "medium";
+    
+    if (!segments.length) return;
+    
+    var routeNodes = buildRouteNodes(segments);
+    if (!routeNodes.length) return;
+    
+    var pts = [];
+    for (var i = 0; i < routeNodes.length; i++) {
+      var coords = getPointCoords(routeNodes[i]);
+      if (coords && Array.isArray(coords) && coords.length >= 2) {
+        pts.push(coords);
+      }
+    }
+    
+    if (pts.length < 2) return;
+    
+    var curvature = routeClass === "major" ? MAJOR_ROUTE_CURVATURE : MEDIUM_ROUTE_CURVATURE;
+    var curvePoints = buildCurvedPolyline(pts, curvature, CURVE_SAMPLES_PER_SEGMENT);
+    
+    if (curvePoints.length < 2) return;
+    
+    // Find the polyline element for this route by querying the SVG directly
+    var polylineElement = svg.querySelector('polyline[data-route-name="' + routeName + '"]');
+    
+    if (polylineElement) {
+      routeHoverData.push({
+        name: routeName,
+        curvePoints: curvePoints,
+        polyline: polylineElement
+      });
+    }
+  });
+
+  // DM4_HELPER_FUNCTION: Calculate distance from point to line segment
+  function distanceToSegment(px, py, x1, y1, x2, y2) {
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared === 0) {
+      return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+    }
+    
+    var t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
+    t = Math.max(0, Math.min(1, t));
+    
+    var closestX = x1 + t * dx;
+    var closestY = y1 + t * dy;
+    
+    return {
+      distance: Math.sqrt((px - closestX) * (px - closestX) + (py - closestY) * (py - closestY)),
+      closestX: closestX,
+      closestY: closestY,
+      segmentIndex: -1,
+      t: t
+    };
+  }
+
+  // DM4_HELPER_FUNCTION: Find closest point on route
+  function findClosestPointOnRoute(px, py, curvePoints) {
+    var minDist = Infinity;
+    var result = null;
+    
+    for (var i = 0; i < curvePoints.length - 1; i++) {
+      var seg = distanceToSegment(
+        px, py,
+        curvePoints[i][0], curvePoints[i][1],
+        curvePoints[i + 1][0], curvePoints[i + 1][1]
+      );
+      
+      if (seg.distance < minDist) {
+        minDist = seg.distance;
+        result = {
+          distance: seg.distance,
+          closestX: seg.closestX,
+          closestY: seg.closestY,
+          segmentIndex: i,
+          t: seg.t
+        };
+      }
+    }
+    
+    return result;
+  }
+
+  // DM4_HELPER_FUNCTION: Calculate tangent angle at point on curve
+  function calculateTangentAtPoint(curvePoints, segmentIndex, t) {
+    if (segmentIndex < 0 || segmentIndex >= curvePoints.length - 1) return 0;
+    
+    var p1 = curvePoints[segmentIndex];
+    var p2 = curvePoints[segmentIndex + 1];
+    
+    var dx = p2[0] - p1[0];
+    var dy = p2[1] - p1[1];
+    
+    var angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    
+    // Normalize angle to keep text readable (never upside down)
+    if (angle > 90 || angle < -90) {
+      angle = angle + 180;
+    }
+    
+    return angle;
+  }
+
+  // DM4_HELPER_FUNCTION: Handle route hover
+  function handleRouteHover(e) {
+    var rect = svg.getBoundingClientRect();
+    var svgX = e.clientX - rect.left;
+    var svgY = e.clientY - rect.top;
+    
+    // Find viewport element to get transform
+    var viewport = svg.parentElement;
+    if (!viewport) return;
+    
+    var transform = viewport.style.transform || "";
+    var translateMatch = transform.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
+    var scaleMatch = transform.match(/scale\(([^)]+)\)/);
+    
+    var translateX = translateMatch ? parseFloat(translateMatch[1]) : 0;
+    var translateY = translateMatch ? parseFloat(translateMatch[2]) : 0;
+    var scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+    
+    // Convert screen coordinates to world coordinates
+    var worldX = (svgX - translateX) / scale;
+    var worldY = (svgY - translateY) / scale;
+    
+    var closestRoute = null;
+    var closestDistance = Infinity;
+    var closestPoint = null;
+    
+    // Find closest route within threshold
+    for (var i = 0; i < routeHoverData.length; i++) {
+      var route = routeHoverData[i];
+      var result = findClosestPointOnRoute(worldX, worldY, route.curvePoints);
+      
+      if (result && result.distance < closestDistance && result.distance <= HOVER_PROXIMITY_THRESHOLD) {
+        closestDistance = result.distance;
+        closestRoute = route;
+        closestPoint = result;
+      }
+    }
+    
+    // Update hover state
+    if (closestRoute && closestRoute !== currentHoveredRoute) {
+      // Remove previous hover
+      if (currentHoveredRoute) {
+        currentHoveredRoute.polyline.classList.remove("dm-route-hover");
+      }
+      if (currentRouteLabel && currentRouteLabel.parentNode) {
+        currentRouteLabel.parentNode.removeChild(currentRouteLabel);
+        currentRouteLabel = null;
+      }
+      
+      // Add new hover
+      closestRoute.polyline.classList.add("dm-route-hover");
+      currentHoveredRoute = closestRoute;
+      
+      // Create label
+      var label = document.createElement("div");
+      label.className = "dm-route-label";
+      label.textContent = closestRoute.name;
+      label.style.position = "absolute";
+      label.style.left = closestPoint.closestX + "px";
+      label.style.top = closestPoint.closestY + "px";
+      
+      // Calculate and apply tangent angle
+      var angle = calculateTangentAtPoint(
+        closestRoute.curvePoints,
+        closestPoint.segmentIndex,
+        closestPoint.t
+      );
+      label.style.transform = "rotate(" + angle + "deg)";
+      
+      // Add label to labels layer
+      var labelsLayer = document.querySelector(".dm-layer-labels");
+      if (labelsLayer) {
+        labelsLayer.appendChild(label);
+        currentRouteLabel = label;
+      }
+      
+    } else if (!closestRoute && currentHoveredRoute) {
+      // Remove hover when cursor moves away
+      currentHoveredRoute.polyline.classList.remove("dm-route-hover");
+      currentHoveredRoute = null;
+      
+      if (currentRouteLabel && currentRouteLabel.parentNode) {
+        currentRouteLabel.parentNode.removeChild(currentRouteLabel);
+        currentRouteLabel = null;
+      }
+    }
+  }
+
+  // Add mousemove listener to SVG
+  svg.addEventListener("mousemove", handleRouteHover);
+
   // DM4_HELPER_FUNCTION: renderSelection
   // Memoized: only updates when selection actually changes
   let lastSelectedRouteId = null;
@@ -751,6 +960,10 @@ function createRouteLayer(core) {
     element: svg,
     destroy: function () {
       if (unsubscribe) unsubscribe();
+      svg.removeEventListener("mousemove", handleRouteHover);
+      if (currentRouteLabel && currentRouteLabel.parentNode) {
+        currentRouteLabel.parentNode.removeChild(currentRouteLabel);
+      }
     }
   };
 }

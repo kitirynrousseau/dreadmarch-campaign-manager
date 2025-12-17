@@ -58,6 +58,17 @@
 
   --dm-system-label-font-weight: 600;
 
+  /* Route label styling */
+  --dm-route-label-color: #e8c0a8;
+  --dm-route-label-font: 1.20rem;
+  --dm-route-label-glow:
+    drop-shadow(0 0 3px rgba(255, 180, 120, 0.3))
+    drop-shadow(0 0 6px rgba(255, 140, 80, 0.4));
+
+  /* Route hover highlight colors */
+  --route-hover-color: #ff8844;
+  --route-hover-glow: rgba(255, 136, 68, 0.8);
+
   /* Text role colors wired into DM4 style contract */
   --dm-text-title-color:  var(--dm-crimson-accent);
   --dm-text-header-color: var(--dm-crimson-accent);
@@ -265,5 +276,26 @@
 .route-major polyline,
 .route-medium polyline {
   vector-effect: non-scaling-stroke;
+}
+
+/* Route hover highlighting */
+.dm-route-hover {
+  stroke: var(--route-hover-color) !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 8px var(--route-hover-glow));
+}
+
+/* Route label styling */
+.dm-route-label {
+  position: absolute;
+  font-size: var(--dm-route-label-font);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--dm-route-label-color);
+  white-space: nowrap;
+  pointer-events: none;
+  filter: var(--dm-route-label-glow);
+  font-weight: 500;
+  transform-origin: left center;
 }
 

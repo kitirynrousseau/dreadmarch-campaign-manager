@@ -823,11 +823,16 @@ function createRouteLayer(core) {
 
   // DM4_HELPER_FUNCTION: Activate route hover
   function activateRouteHover(route) {
-    // Add hover class to polyline
+    // ALWAYS deactivate current route first when switching to a new one
+    if (currentHoveredRoute && currentHoveredRoute !== route) {
+      currentHoveredRoute.polyline.classList.remove("dm-route-hover");
+    }
+    
+    // Now activate the new route
     route.polyline.classList.add("dm-route-hover");
     currentHoveredRoute = route;
     
-    // Update tooltip text and make it visible
+    // Update tooltip text and show it
     if (routeHoverTooltip) {
       routeHoverTooltip.textContent = route.name;
       routeHoverTooltip.classList.add("dm-route-hover-tooltip-visible");

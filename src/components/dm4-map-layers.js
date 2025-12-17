@@ -462,35 +462,75 @@ function createRouteLayer(core) {
     return curvePoints;
   }
 
+  // DM4_HELPER_FUNCTION: calculateTangentAngle
+  // Calculate the angle of the route at an endpoint based on the curve tangent
+  function calculateTangentAngle(endpointId, routeId) {
+    var segments = hyperlanes[routeId];
+    if (!segments || !segments.length) return 0;
+    
+    var routeNodes = buildRouteNodes(segments);
+    if (!routeNodes || routeNodes.length < 2) return 0;
+    
+    var pts = [];
+    for (var i = 0; i < routeNodes.length; i++) {
+      var coords = getPointCoords(routeNodes[i]);
+      if (coords && Array.isArray(coords) && coords.length >= 2) {
+        pts.push(coords);
+      }
+    }
+    
+    if (pts.length < 2) return 0;
+    
+    var rMeta = routeMeta[routeId] || {};
+    var routeClass = rMeta.route_class || "medium";
+    var curvature = routeClass === "major" ? 0.35 : 0.32;
+    var samplesPerSegment = 12;
+    var curvePoints = buildCurvedPolyline(pts, curvature, samplesPerSegment);
+    
+    if (!curvePoints || curvePoints.length < 2) return 0;
+    
+    var endCoords = endpoints[endpointId];
+    if (!endCoords || endCoords.length < 2) return 0;
+    
+    var endX = endCoords[0];
+    var endY = endCoords[1];
+    
+    var isFirstEndpoint = Math.abs(curvePoints[0][0] - endX) < 1 && Math.abs(curvePoints[0][1] - endY) < 1;
+    var isLastEndpoint = Math.abs(curvePoints[curvePoints.length - 1][0] - endX) < 1 && Math.abs(curvePoints[curvePoints.length - 1][1] - endY) < 1;
+    
+    var dx, dy;
+    if (isFirstEndpoint && curvePoints.length >= 2) {
+      dx = curvePoints[0][0] - curvePoints[1][0];
+      dy = curvePoints[0][1] - curvePoints[1][1];
+    } else if (isLastEndpoint && curvePoints.length >= 2) {
+      dx = curvePoints[curvePoints.length - 1][0] - curvePoints[curvePoints.length - 2][0];
+      dy = curvePoints[curvePoints.length - 1][1] - curvePoints[curvePoints.length - 2][1];
+    } else {
+      return 0;
+    }
+    
+    var angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    return angle;
+  }
+
   // DM4_HELPER_FUNCTION: buildRouteEdgeMarkers
   function buildRouteEdgeMarkers() {
-    const markers = [];
+    var markers = [];
     Object.keys(endpoints).forEach(function (id) {
-      const meta = endpointMeta[id];
+      var meta = endpointMeta[id];
       if (!meta || meta.role !== "synthetic_edge") return;
 
-      const coords = endpoints[id];
+      var coords = endpoints[id];
       if (!Array.isArray(coords) || coords.length < 2) return;
 
-      const routeId = meta.route_id;
+      var routeId = meta.route_id;
       if (!routeId) return;
 
-      const rMeta = routeMeta[routeId] || {};
-      const routeClass = rMeta.route_class || "minor";
+      var rMeta = routeMeta[routeId] || {};
+      var routeClass = rMeta.route_class || "minor";
       if (routeClass === "minor") return;
 
-      let outward = meta.outward_vector || [0, 0];
-      let outX = outward[0] || 0;
-      let outY = outward[1] || 0;
-
-      // Normalize to a simple cardinal direction
-      if (Math.abs(outX) >= Math.abs(outY)) {
-        outY = 0;
-        outX = outX >= 0 ? 1 : -1;
-      } else {
-        outX = 0;
-        outY = outY >= 0 ? 1 : -1;
-      }
+      var tangentAngle = calculateTangentAngle(id, routeId);
 
       markers.push({
         id: id,
@@ -498,8 +538,7 @@ function createRouteLayer(core) {
         routeClass: routeClass,
         x: coords[0],
         y: coords[1],
-        outwardX: outX,
-        outwardY: outY
+        angle: tangentAngle
       });
     });
     return markers;
@@ -641,37 +680,11 @@ function createRouteLayer(core) {
           " L " + x + " " + (y - size / 2) + " Z"
       );
 
-      let angle = 0;
-      if (m.outwardX === 0 && m.outwardY > 0) {
-        angle = 90;
-      } else if (m.outwardX === 0 && m.outwardY < 0) {
-        angle = -90;
-      } else if (m.outwardX > 0 && m.outwardY === 0) {
-        angle = 0;
-      } else if (m.outwardX < 0 && m.outwardY === 0) {
-        angle = 180;
-      }
+      var angle = m.angle || 0;
 
       arrow.setAttribute("transform", "rotate(" + angle + " " + x + " " + y + ")");
 
-      const label = document.createElementNS(svgNS, "text");
-      label.setAttribute("class", "dm4-route-endpoint-label dm-text-body");
-      label.textContent = m.routeId;
-
-      const labelOffset = 18;
-      let lx = x;
-      let ly = y;
-
-      if (m.outwardY > 0) ly += labelOffset;
-      if (m.outwardY < 0) ly -= labelOffset;
-      if (m.outwardX > 0) lx += labelOffset;
-      if (m.outwardX < 0) lx -= labelOffset;
-
-      label.setAttribute("x", lx);
-      label.setAttribute("y", ly);
-
       edgesGroup.appendChild(arrow);
-      edgesGroup.appendChild(label);
     });
 
     svg.appendChild(edgesGroup);

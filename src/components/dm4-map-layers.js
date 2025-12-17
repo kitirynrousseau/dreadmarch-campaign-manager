@@ -703,8 +703,11 @@ function createRouteLayer(core) {
   // DM4_HELPER_FUNCTION: Route hover detection and labeling
   var routeHoverData = [];
   var currentHoveredRoute = null;
-  var currentRouteLabel = null;
   var HOVER_PROXIMITY_THRESHOLD = 50;
+  var HOVER_DWELL_TIME = 350; // ms before hover activates
+  var hoverDelayTimer = null;
+  var pendingHoverRoute = null;
+  var routeHoverTooltip = null; // Fixed tooltip element
 
   // Build route hover data structure (major and medium routes only)
   Object.keys(hyperlanes).forEach(function (routeName) {
@@ -818,6 +821,33 @@ function createRouteLayer(core) {
     return angle;
   }
 
+  // DM4_HELPER_FUNCTION: Activate route hover
+  function activateRouteHover(route) {
+    // Add hover class to polyline
+    route.polyline.classList.add("dm-route-hover");
+    currentHoveredRoute = route;
+    
+    // Update tooltip text and make it visible
+    if (routeHoverTooltip) {
+      routeHoverTooltip.textContent = route.name;
+      routeHoverTooltip.classList.add("dm-route-hover-tooltip-visible");
+    }
+  }
+  
+  // DM4_HELPER_FUNCTION: Deactivate route hover
+  function deactivateRouteHover() {
+    // Remove hover class from polyline
+    if (currentHoveredRoute) {
+      currentHoveredRoute.polyline.classList.remove("dm-route-hover");
+      currentHoveredRoute = null;
+    }
+    
+    // Hide tooltip
+    if (routeHoverTooltip) {
+      routeHoverTooltip.classList.remove("dm-route-hover-tooltip-visible");
+    }
+  }
+
   // DM4_HELPER_FUNCTION: Handle route hover
   function handleRouteHover(e) {
     // Find the map container element
@@ -848,7 +878,6 @@ function createRouteLayer(core) {
     
     var closestRoute = null;
     var closestDistance = Infinity;
-    var closestPoint = null;
     
     // Find closest route within threshold
     for (var i = 0; i < routeHoverData.length; i++) {
@@ -858,57 +887,25 @@ function createRouteLayer(core) {
       if (result && result.distance < closestDistance && result.distance <= HOVER_PROXIMITY_THRESHOLD) {
         closestDistance = result.distance;
         closestRoute = route;
-        closestPoint = result;
       }
     }
     
-    // Update hover state
+    // Update hover state with dwell time
     if (closestRoute && closestRoute !== currentHoveredRoute) {
-      // Remove previous hover
-      if (currentHoveredRoute) {
-        currentHoveredRoute.polyline.classList.remove("dm-route-hover");
+      // Don't activate immediately - start dwell timer
+      if (pendingHoverRoute !== closestRoute) {
+        clearTimeout(hoverDelayTimer);
+        pendingHoverRoute = closestRoute;
+        hoverDelayTimer = setTimeout(function() {
+          activateRouteHover(closestRoute);
+          pendingHoverRoute = null;
+        }, HOVER_DWELL_TIME);
       }
-      if (currentRouteLabel && currentRouteLabel.parentNode) {
-        currentRouteLabel.parentNode.removeChild(currentRouteLabel);
-        currentRouteLabel = null;
-      }
-      
-      // Add new hover
-      closestRoute.polyline.classList.add("dm-route-hover");
-      currentHoveredRoute = closestRoute;
-      
-      // Create label
-      var label = document.createElement("div");
-      label.className = "dm-route-label";
-      label.textContent = closestRoute.name;
-      label.style.position = "absolute";
-      label.style.left = closestPoint.closestX + "px";
-      label.style.top = closestPoint.closestY + "px";
-      
-      // Calculate and apply tangent angle
-      var angle = calculateTangentAtPoint(
-        closestRoute.curvePoints,
-        closestPoint.segmentIndex,
-        closestPoint.t
-      );
-      label.style.transform = "rotate(" + angle + "deg)";
-      
-      // Add label to labels layer
-      var labelsLayer = document.querySelector(".dm-layer-labels");
-      if (labelsLayer) {
-        labelsLayer.appendChild(label);
-        currentRouteLabel = label;
-      }
-      
-    } else if (!closestRoute && currentHoveredRoute) {
-      // Remove hover when cursor moves away
-      currentHoveredRoute.polyline.classList.remove("dm-route-hover");
-      currentHoveredRoute = null;
-      
-      if (currentRouteLabel && currentRouteLabel.parentNode) {
-        currentRouteLabel.parentNode.removeChild(currentRouteLabel);
-        currentRouteLabel = null;
-      }
+    } else if (!closestRoute) {
+      // Cursor left proximity - clear pending and active hover immediately
+      clearTimeout(hoverDelayTimer);
+      pendingHoverRoute = null;
+      deactivateRouteHover();
     }
   }
 
@@ -920,6 +917,13 @@ function createRouteLayer(core) {
   function attachHoverListener() {
     var mapContainer = document.querySelector('.dm-map-container');
     if (mapContainer && !hoverListenerTarget) {
+      // Create fixed tooltip element (once)
+      if (!routeHoverTooltip) {
+        routeHoverTooltip = document.createElement("div");
+        routeHoverTooltip.className = "dm-route-hover-tooltip";
+        mapContainer.appendChild(routeHoverTooltip);
+      }
+      
       mapContainer.addEventListener("mousemove", handleRouteHover);
       hoverListenerTarget = mapContainer;
     }
@@ -984,13 +988,17 @@ function createRouteLayer(core) {
     element: svg,
     destroy: function () {
       if (unsubscribe) unsubscribe();
+      // Clear hover timer
+      clearTimeout(hoverDelayTimer);
       // Remove listener from the correct target (map container, not SVG)
       if (hoverListenerTarget) {
         hoverListenerTarget.removeEventListener("mousemove", handleRouteHover);
         hoverListenerTarget = null;
       }
-      if (currentRouteLabel && currentRouteLabel.parentNode) {
-        currentRouteLabel.parentNode.removeChild(currentRouteLabel);
+      // Remove tooltip element
+      if (routeHoverTooltip && routeHoverTooltip.parentNode) {
+        routeHoverTooltip.parentNode.removeChild(routeHoverTooltip);
+        routeHoverTooltip = null;
       }
     }
   };

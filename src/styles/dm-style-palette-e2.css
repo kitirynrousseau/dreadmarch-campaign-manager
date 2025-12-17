@@ -65,9 +65,9 @@
     drop-shadow(0 0 3px rgba(255, 180, 120, 0.3))
     drop-shadow(0 0 6px rgba(255, 140, 80, 0.4));
 
-  /* Route hover highlight colors */
-  --route-hover-color: #ff8844;
-  --route-hover-glow: rgba(255, 136, 68, 0.8);
+  /* Route hover - aligned with selection palette */
+  --route-hover-color: var(--selection-color, #e46b24);
+  --route-hover-glow: var(--selection-glow-color, #e46b24);
 
   /* Text role colors wired into DM4 style contract */
   --dm-text-title-color:  var(--dm-crimson-accent);
@@ -282,10 +282,34 @@
 .dm-route-hover {
   stroke: var(--route-hover-color) !important;
   opacity: 1 !important;
-  filter: drop-shadow(0 0 8px var(--route-hover-glow));
+  filter: drop-shadow(0 0 6px var(--route-hover-glow));
 }
 
-/* Route label styling */
+/* Fixed position route hover tooltip */
+.dm-route-hover-tooltip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 12px;
+  background: rgba(5, 0, 0, 0.85);
+  border: 1px solid var(--selection-color, #e46b24);
+  border-radius: 3px;
+  color: var(--dm-system-label-selected-color, var(--selection-color, #e46b24));
+  font-size: var(--dm-font-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  filter: var(--sysLabelGlowSelected);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease-in;
+  z-index: 100;
+}
+
+.dm-route-hover-tooltip.dm-route-hover-tooltip-visible {
+  opacity: 1;
+}
+
+/* Route label styling (legacy - kept for compatibility) */
 .dm-route-label {
   position: absolute;
   font-size: var(--dm-route-label-font);

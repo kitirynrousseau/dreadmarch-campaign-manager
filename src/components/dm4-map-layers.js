@@ -734,15 +734,8 @@ function createRouteLayer(core) {
     
     if (curvePoints.length < 2) return;
     
-    // Find the polyline element for this route
-    var polylineElement = null;
-    for (var j = 0; j < svg.children.length; j++) {
-      var child = svg.children[j];
-      if (child.tagName === "polyline" && child.getAttribute("data-route-name") === routeName) {
-        polylineElement = child;
-        break;
-      }
-    }
+    // Find the polyline element for this route by querying the SVG directly
+    var polylineElement = svg.querySelector('polyline[data-route-name="' + routeName + '"]');
     
     if (polylineElement) {
       routeHoverData.push({

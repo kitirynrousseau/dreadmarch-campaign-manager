@@ -865,6 +865,113 @@ function EditorPanel(core) {
     inner.classList.add("dm4-editor-inner");
     root.appendChild(inner);
 
+    // Helper function to create a filterable select dropdown
+    function createFilterableSelect(options, defaultText) {
+      var container = document.createElement("div");
+      container.classList.add("dm4-filterable-select");
+      container.style.position = "relative";
+      container.style.display = "inline-block";
+      
+      var input = document.createElement("input");
+      input.type = "text";
+      input.classList.add("dm4-editor-input", "dm4-filterable-input");
+      input.placeholder = defaultText || "Type to filter...";
+      input.autocomplete = "off";
+      
+      var dropdown = document.createElement("div");
+      dropdown.classList.add("dm4-filterable-dropdown");
+      dropdown.style.display = "none";
+      dropdown.style.position = "absolute";
+      dropdown.style.top = "100%";
+      dropdown.style.left = "0";
+      dropdown.style.right = "0";
+      dropdown.style.maxHeight = "200px";
+      dropdown.style.overflowY = "auto";
+      dropdown.style.background = "rgba(10, 5, 5, 0.95)";
+      dropdown.style.border = "1px solid var(--dm-color-muted)";
+      dropdown.style.zIndex = "1000";
+      
+      var selectedValue = "";
+      var allOptions = options || [];
+      
+      function renderOptions(filter) {
+        dropdown.innerHTML = "";
+        var filterLower = (filter || "").toLowerCase();
+        var matchedOptions = allOptions.filter(function(opt) {
+          return opt.toLowerCase().indexOf(filterLower) !== -1;
+        });
+        
+        if (matchedOptions.length === 0) {
+          var noMatch = document.createElement("div");
+          noMatch.classList.add("dm4-filterable-option");
+          noMatch.textContent = "No matches";
+          noMatch.style.padding = "4px 8px";
+          noMatch.style.color = "var(--dm-color-muted)";
+          dropdown.appendChild(noMatch);
+          return;
+        }
+        
+        matchedOptions.forEach(function(opt) {
+          var option = document.createElement("div");
+          option.classList.add("dm4-filterable-option");
+          option.textContent = opt;
+          option.style.padding = "4px 8px";
+          option.style.cursor = "pointer";
+          option.style.color = "var(--dm-color-body)";
+          
+          option.addEventListener("mouseenter", function() {
+            option.style.background = "rgba(226, 58, 58, 0.3)";
+          });
+          
+          option.addEventListener("mouseleave", function() {
+            option.style.background = "transparent";
+          });
+          
+          option.addEventListener("click", function() {
+            selectedValue = opt;
+            input.value = opt;
+            dropdown.style.display = "none";
+          });
+          
+          dropdown.appendChild(option);
+        });
+      }
+      
+      input.addEventListener("focus", function() {
+        dropdown.style.display = "block";
+        renderOptions(input.value);
+      });
+      
+      input.addEventListener("input", function() {
+        dropdown.style.display = "block";
+        renderOptions(input.value);
+      });
+      
+      input.addEventListener("blur", function() {
+        setTimeout(function() {
+          dropdown.style.display = "none";
+        }, 200);
+      });
+      
+      container.appendChild(input);
+      container.appendChild(dropdown);
+      
+      return {
+        element: container,
+        getValue: function() {
+          return selectedValue;
+        },
+        setValue: function(val) {
+          selectedValue = val;
+          input.value = val;
+        },
+        clear: function() {
+          selectedValue = "";
+          input.value = "";
+        }
+      };
+    }
+
     // Title – uses dm-text-title
     const titleEl = document.createElement("h2");
     titleEl.classList.add("dm4-editor-title", "dm-text-title");
@@ -1474,50 +1581,33 @@ function EditorPanel(core) {
       var addMinorRow = document.createElement("div");
       addMinorRow.classList.add("dm4-editor-line", "dm-text-body");
       
-      var minorFromSelect = document.createElement("select");
-      minorFromSelect.classList.add("dm4-editor-select");
-      var minorToSelect = document.createElement("select");
-      minorToSelect.classList.add("dm4-editor-select");
+      var minorFromSelectWrapper = createFilterableSelect(systemIds, "From system...");
+      var minorToSelectWrapper = createFilterableSelect(systemIds, "To system...");
       
-      var defaultMinorFrom = document.createElement("option");
-      defaultMinorFrom.value = "";
-      defaultMinorFrom.textContent = "From...";
-      minorFromSelect.appendChild(defaultMinorFrom);
-      
-      var defaultMinorTo = document.createElement("option");
-      defaultMinorTo.value = "";
-      defaultMinorTo.textContent = "To...";
-      minorToSelect.appendChild(defaultMinorTo);
-      
-      systemIds.forEach(function(id) {
-        var optFrom = document.createElement("option");
-        optFrom.value = id;
-        optFrom.textContent = id;
-        minorFromSelect.appendChild(optFrom);
-        
-        var optTo = document.createElement("option");
-        optTo.value = id;
-        optTo.textContent = id;
-        minorToSelect.appendChild(optTo);
-      });
-      
-      addMinorRow.appendChild(minorFromSelect);
+      addMinorRow.appendChild(minorFromSelectWrapper.element);
       addMinorRow.appendChild(document.createTextNode(" ↔ "));
-      addMinorRow.appendChild(minorToSelect);
+      addMinorRow.appendChild(minorToSelectWrapper.element);
       
       var addMinorBtn = document.createElement("button");
       addMinorBtn.type = "button";
       addMinorBtn.textContent = "Add";
       addMinorBtn.classList.add("dm4-editor-button");
       addMinorBtn.addEventListener("click", function() {
-        if (minorFromSelect.value && minorToSelect.value && minorFromSelect.value !== minorToSelect.value) {
+        var fromValue = minorFromSelectWrapper.getValue();
+        var toValue = minorToSelectWrapper.getValue();
+        
+        if (fromValue && toValue && fromValue !== toValue) {
           var datasetId = getCurrentDatasetId();
           state.actions.addEditorJob({
             target_dataset: datasetId,
             op_type: "add_minor_route",
-            payload: { from_system: minorFromSelect.value, to_system: minorToSelect.value },
+            payload: { from_system: fromValue, to_system: toValue },
             created_at: new Date().toISOString()
           });
+          
+          // Clear the inputs after adding
+          minorFromSelectWrapper.clear();
+          minorToSelectWrapper.clear();
         }
       });
       addMinorRow.appendChild(addMinorBtn);
@@ -1670,43 +1760,22 @@ function EditorPanel(core) {
       var addSegRow = document.createElement("div");
       addSegRow.classList.add("dm4-editor-line", "dm-text-body");
       
-      var fromSelect = document.createElement("select");
-      fromSelect.classList.add("dm4-editor-select");
-      var toSelect = document.createElement("select");
-      toSelect.classList.add("dm4-editor-select");
+      var fromSelectWrapper = createFilterableSelect(systemIds, "From system...");
+      var toSelectWrapper = createFilterableSelect(systemIds, "To system...");
       
-      var defaultFrom = document.createElement("option");
-      defaultFrom.value = "";
-      defaultFrom.textContent = "From...";
-      fromSelect.appendChild(defaultFrom);
-      
-      var defaultTo = document.createElement("option");
-      defaultTo.value = "";
-      defaultTo.textContent = "To...";
-      toSelect.appendChild(defaultTo);
-      
-      systemIds.forEach(function(id) {
-        var optFrom = document.createElement("option");
-        optFrom.value = id;
-        optFrom.textContent = id;
-        fromSelect.appendChild(optFrom);
-        
-        var optTo = document.createElement("option");
-        optTo.value = id;
-        optTo.textContent = id;
-        toSelect.appendChild(optTo);
-      });
-      
-      addSegRow.appendChild(fromSelect);
+      addSegRow.appendChild(fromSelectWrapper.element);
       addSegRow.appendChild(document.createTextNode(" ↔ "));
-      addSegRow.appendChild(toSelect);
+      addSegRow.appendChild(toSelectWrapper.element);
       
       var addSegBtn = document.createElement("button");
       addSegBtn.type = "button";
       addSegBtn.textContent = "Add to End";
       addSegBtn.classList.add("dm4-editor-button");
       addSegBtn.addEventListener("click", function() {
-        if (fromSelect.value && toSelect.value && fromSelect.value !== toSelect.value) {
+        var fromValue = fromSelectWrapper.getValue();
+        var toValue = toSelectWrapper.getValue();
+        
+        if (fromValue && toValue && fromValue !== toValue) {
           var datasetId = getCurrentDatasetId();
           
           state.actions.addEditorJob({
@@ -1714,11 +1783,15 @@ function EditorPanel(core) {
             op_type: "add_hyperlane_segment",
             payload: { 
               route_name: routeName, 
-              from_system: fromSelect.value, 
-              to_system: toSelect.value
+              from_system: fromValue, 
+              to_system: toValue
             },
             created_at: new Date().toISOString()
           });
+          
+          // Clear the inputs after adding
+          fromSelectWrapper.clear();
+          toSelectWrapper.clear();
         }
       });
       addSegRow.appendChild(addSegBtn);

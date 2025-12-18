@@ -278,6 +278,429 @@
       };
     }
 
+    // ROUTE OPERATIONS
+
+    // Apply: add_hyperlane_segment
+    function dm4ApplyAddHyperlaneSegment(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var routeName = payload.route_name;
+      var fromSystem = payload.from_system;
+      var toSystem = payload.to_system;
+
+      if (!routeName || !fromSystem || !toSystem) {
+        var msg = "add_hyperlane_segment job missing required fields";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var systems = db5.systems || {};
+      if (!systems[fromSystem]) {
+        var fromMsg = "System '" + fromSystem + "' not found in DB5";
+        if (strict) throw new Error(fromMsg);
+        return { applied: false, message: fromMsg };
+      }
+      if (!systems[toSystem]) {
+        var toMsg = "System '" + toSystem + "' not found in DB5";
+        if (strict) throw new Error(toMsg);
+        return { applied: false, message: toMsg };
+      }
+
+      var hyperlanes = db5.hyperlanes || {};
+      if (!hyperlanes[routeName]) {
+        hyperlanes[routeName] = [];
+        db5.hyperlanes = hyperlanes;
+      }
+
+      // Check if segment already exists
+      var exists = hyperlanes[routeName].some(function (seg) {
+        return (seg[0] === fromSystem && seg[1] === toSystem) ||
+               (seg[0] === toSystem && seg[1] === fromSystem);
+      });
+
+      if (exists) {
+        return { applied: false, message: "Segment " + fromSystem + " <-> " + toSystem + " already exists in route '" + routeName + "'" };
+      }
+
+      hyperlanes[routeName].push([fromSystem, toSystem]);
+
+      // Update route_metadata if it doesn't exist
+      var routeMeta = db5.route_metadata || {};
+      if (!routeMeta[routeName]) {
+        routeMeta[routeName] = { route_class: "medium" };
+        db5.route_metadata = routeMeta;
+      }
+
+      return {
+        applied: true,
+        message: "Added segment " + fromSystem + " <-> " + toSystem + " to route '" + routeName + "'"
+      };
+    }
+
+    // Apply: remove_hyperlane_segment
+    function dm4ApplyRemoveHyperlaneSegment(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var routeName = payload.route_name;
+      var fromSystem = payload.from_system;
+      var toSystem = payload.to_system;
+
+      if (!routeName || !fromSystem || !toSystem) {
+        var msg = "remove_hyperlane_segment job missing required fields";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var hyperlanes = db5.hyperlanes || {};
+      if (!hyperlanes[routeName]) {
+        var noRouteMsg = "Route '" + routeName + "' not found in DB5";
+        if (strict) throw new Error(noRouteMsg);
+        return { applied: false, message: noRouteMsg };
+      }
+
+      var initialLength = hyperlanes[routeName].length;
+      hyperlanes[routeName] = hyperlanes[routeName].filter(function (seg) {
+        return !((seg[0] === fromSystem && seg[1] === toSystem) ||
+                 (seg[0] === toSystem && seg[1] === fromSystem));
+      });
+
+      if (hyperlanes[routeName].length === initialLength) {
+        return { applied: false, message: "Segment " + fromSystem + " <-> " + toSystem + " not found in route '" + routeName + "'" };
+      }
+
+      return {
+        applied: true,
+        message: "Removed segment " + fromSystem + " <-> " + toSystem + " from route '" + routeName + "'"
+      };
+    }
+
+    // Apply: create_route
+    function dm4ApplyCreateRoute(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var routeName = payload.route_name;
+      var routeClass = payload.route_class || "medium";
+      var segments = payload.segments || [];
+
+      if (!routeName) {
+        var msg = "create_route job missing route_name";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var hyperlanes = db5.hyperlanes || {};
+      if (hyperlanes[routeName]) {
+        var existsMsg = "Route '" + routeName + "' already exists in DB5";
+        if (strict) throw new Error(existsMsg);
+        return { applied: false, message: existsMsg };
+      }
+
+      hyperlanes[routeName] = segments;
+      db5.hyperlanes = hyperlanes;
+
+      var routeMeta = db5.route_metadata || {};
+      routeMeta[routeName] = { route_class: routeClass };
+      db5.route_metadata = routeMeta;
+
+      return {
+        applied: true,
+        message: "Created route '" + routeName + "' with class '" + routeClass + "' and " + segments.length + " segment(s)"
+      };
+    }
+
+    // Apply: delete_route
+    function dm4ApplyDeleteRoute(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var routeName = payload.route_name;
+
+      if (!routeName) {
+        var msg = "delete_route job missing route_name";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var hyperlanes = db5.hyperlanes || {};
+      if (!hyperlanes[routeName]) {
+        var notFoundMsg = "Route '" + routeName + "' not found in DB5";
+        if (strict) throw new Error(notFoundMsg);
+        return { applied: false, message: notFoundMsg };
+      }
+
+      delete hyperlanes[routeName];
+
+      var routeMeta = db5.route_metadata || {};
+      if (routeMeta[routeName]) {
+        delete routeMeta[routeName];
+      }
+
+      return {
+        applied: true,
+        message: "Deleted route '" + routeName + "'"
+      };
+    }
+
+    // Apply: update_route_metadata
+    function dm4ApplyUpdateRouteMetadata(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var routeName = payload.route_name;
+
+      if (!routeName) {
+        var msg = "update_route_metadata job missing route_name";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var routeMeta = db5.route_metadata || {};
+      if (!routeMeta[routeName]) {
+        routeMeta[routeName] = {};
+        db5.route_metadata = routeMeta;
+      }
+
+      var changes = [];
+      if (payload.route_class !== undefined) {
+        routeMeta[routeName].route_class = payload.route_class;
+        changes.push("route_class -> " + payload.route_class);
+      }
+
+      if (payload.display_name !== undefined) {
+        routeMeta[routeName].display_name = payload.display_name;
+        changes.push("display_name -> " + payload.display_name);
+      }
+
+      return {
+        applied: true,
+        message: "Updated route metadata for '" + routeName + "': " + changes.join(", ")
+      };
+    }
+
+    // Apply: add_minor_route
+    function dm4ApplyAddMinorRoute(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var fromSystem = payload.from_system;
+      var toSystem = payload.to_system;
+
+      if (!fromSystem || !toSystem) {
+        var msg = "add_minor_route job missing required fields";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var systems = db5.systems || {};
+      if (!systems[fromSystem]) {
+        var fromMsg = "System '" + fromSystem + "' not found in DB5";
+        if (strict) throw new Error(fromMsg);
+        return { applied: false, message: fromMsg };
+      }
+      if (!systems[toSystem]) {
+        var toMsg = "System '" + toSystem + "' not found in DB5";
+        if (strict) throw new Error(toMsg);
+        return { applied: false, message: toMsg };
+      }
+
+      var hyperlanes = db5.hyperlanes || {};
+      if (!hyperlanes.minor_routes) {
+        hyperlanes.minor_routes = [];
+        db5.hyperlanes = hyperlanes;
+      }
+
+      // Check if route already exists
+      var exists = hyperlanes.minor_routes.some(function (seg) {
+        return (seg[0] === fromSystem && seg[1] === toSystem) ||
+               (seg[0] === toSystem && seg[1] === fromSystem);
+      });
+
+      if (exists) {
+        return { applied: false, message: "Minor route " + fromSystem + " <-> " + toSystem + " already exists" };
+      }
+
+      hyperlanes.minor_routes.push([fromSystem, toSystem]);
+
+      return {
+        applied: true,
+        message: "Added minor route " + fromSystem + " <-> " + toSystem
+      };
+    }
+
+    // Apply: remove_minor_route
+    function dm4ApplyRemoveMinorRoute(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var fromSystem = payload.from_system;
+      var toSystem = payload.to_system;
+
+      if (!fromSystem || !toSystem) {
+        var msg = "remove_minor_route job missing required fields";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var hyperlanes = db5.hyperlanes || {};
+      if (!hyperlanes.minor_routes) {
+        return { applied: false, message: "No minor_routes found in DB5" };
+      }
+
+      var initialLength = hyperlanes.minor_routes.length;
+      hyperlanes.minor_routes = hyperlanes.minor_routes.filter(function (seg) {
+        return !((seg[0] === fromSystem && seg[1] === toSystem) ||
+                 (seg[0] === toSystem && seg[1] === fromSystem));
+      });
+
+      if (hyperlanes.minor_routes.length === initialLength) {
+        return { applied: false, message: "Minor route " + fromSystem + " <-> " + toSystem + " not found" };
+      }
+
+      return {
+        applied: true,
+        message: "Removed minor route " + fromSystem + " <-> " + toSystem
+      };
+    }
+
+    // SECTOR OPERATIONS
+
+    // Apply: create_sector
+    function dm4ApplyCreateSector(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var sectorName = payload.sector_name;
+
+      if (!sectorName) {
+        var msg = "create_sector job missing sector_name";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var sectors = db5.sectors || {};
+      if (sectors[sectorName]) {
+        var existsMsg = "Sector '" + sectorName + "' already exists in DB5";
+        if (strict) throw new Error(existsMsg);
+        return { applied: false, message: existsMsg };
+      }
+
+      sectors[sectorName] = {};
+      db5.sectors = sectors;
+
+      return {
+        applied: true,
+        message: "Created sector '" + sectorName + "'"
+      };
+    }
+
+    // Apply: delete_sector
+    function dm4ApplyDeleteSector(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var sectorName = payload.sector_name;
+      var reassignTo = payload.reassign_to;
+
+      if (!sectorName) {
+        var msg = "delete_sector job missing sector_name";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var systems = db5.systems || {};
+      var systemsInSector = [];
+      Object.keys(systems).forEach(function (sysId) {
+        if (systems[sysId].sector === sectorName) {
+          systemsInSector.push(sysId);
+        }
+      });
+
+      if (systemsInSector.length > 0 && !reassignTo) {
+        var hasSystemsMsg = "Sector '" + sectorName + "' has " + systemsInSector.length + " system(s); must provide reassign_to";
+        if (strict) throw new Error(hasSystemsMsg);
+        return { applied: false, message: hasSystemsMsg };
+      }
+
+      // Reassign systems if needed
+      if (systemsInSector.length > 0) {
+        systemsInSector.forEach(function (sysId) {
+          systems[sysId].sector = reassignTo;
+        });
+      }
+
+      var sectors = db5.sectors || {};
+      if (sectors[sectorName]) {
+        delete sectors[sectorName];
+      }
+
+      return {
+        applied: true,
+        message: "Deleted sector '" + sectorName + "'" + (systemsInSector.length > 0 ? "; reassigned " + systemsInSector.length + " system(s) to '" + reassignTo + "'" : "")
+      };
+    }
+
+    // Apply: rename_sector
+    function dm4ApplyRenameSector(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var oldName = payload.old_name;
+      var newName = payload.new_name;
+
+      if (!oldName || !newName) {
+        var msg = "rename_sector job missing old_name or new_name";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var systems = db5.systems || {};
+      var count = 0;
+      Object.keys(systems).forEach(function (sysId) {
+        if (systems[sysId].sector === oldName) {
+          systems[sysId].sector = newName;
+          count++;
+        }
+      });
+
+      var sectors = db5.sectors || {};
+      if (sectors[oldName]) {
+        sectors[newName] = sectors[oldName];
+        delete sectors[oldName];
+      }
+
+      return {
+        applied: true,
+        message: "Renamed sector '" + oldName + "' to '" + newName + "'; updated " + count + " system(s)"
+      };
+    }
+
+    // METADATA OPERATIONS
+
+    // Apply: update_dataset_metadata
+    function dm4ApplyUpdateDatasetMetadata(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+
+      var meta = db5.dataset_metadata || {};
+      var changes = [];
+
+      if (payload.name !== undefined) {
+        meta.name = payload.name;
+        changes.push("name -> " + payload.name);
+      }
+
+      if (payload.version !== undefined) {
+        meta.version = payload.version;
+        changes.push("version -> " + payload.version);
+      }
+
+      if (payload.description !== undefined) {
+        meta.description = payload.description;
+        changes.push("description updated");
+      }
+
+      db5.dataset_metadata = meta;
+
+      return {
+        applied: true,
+        message: "Updated dataset metadata: " + changes.join(", ")
+      };
+    }
+
+
 
     function dm4ApplyEditorJobToDb5(db5, job, strict) {
       var opType = job.op_type || job.type;
@@ -296,15 +719,38 @@
       if (opType === "move_system") {
         return dm4ApplyMoveSystem(db5, job, strict);
       }
-      // Placeholder support for remaining operations - will be fully implemented
-      if (opType === "add_hyperlane_segment" || opType === "remove_hyperlane_segment" || opType === "create_route" || opType === "delete_route" || opType === "update_route_metadata" || opType === "add_minor_route" || opType === "remove_minor_route") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      if (opType === "add_hyperlane_segment") {
+        return dm4ApplyAddHyperlaneSegment(db5, job, strict);
       }
-      if (opType === "create_sector" || opType === "delete_sector" || opType === "rename_sector") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      if (opType === "remove_hyperlane_segment") {
+        return dm4ApplyRemoveHyperlaneSegment(db5, job, strict);
+      }
+      if (opType === "create_route") {
+        return dm4ApplyCreateRoute(db5, job, strict);
+      }
+      if (opType === "delete_route") {
+        return dm4ApplyDeleteRoute(db5, job, strict);
+      }
+      if (opType === "update_route_metadata") {
+        return dm4ApplyUpdateRouteMetadata(db5, job, strict);
+      }
+      if (opType === "add_minor_route") {
+        return dm4ApplyAddMinorRoute(db5, job, strict);
+      }
+      if (opType === "remove_minor_route") {
+        return dm4ApplyRemoveMinorRoute(db5, job, strict);
+      }
+      if (opType === "create_sector") {
+        return dm4ApplyCreateSector(db5, job, strict);
+      }
+      if (opType === "delete_sector") {
+        return dm4ApplyDeleteSector(db5, job, strict);
+      }
+      if (opType === "rename_sector") {
+        return dm4ApplyRenameSector(db5, job, strict);
       }
       if (opType === "update_dataset_metadata") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+        return dm4ApplyUpdateDatasetMetadata(db5, job, strict);
       }
       var msg = "Unsupported op_type '" + opType + "'. Job skipped.";
       if (strict) throw new Error(msg);
@@ -583,15 +1029,38 @@ function EditorPanel(core) {
       if (opType === "move_system") {
         return dm4ApplyMoveSystem(db5, job, strict);
       }
-      // Placeholder support for remaining operations - will be fully implemented
-      if (opType === "add_hyperlane_segment" || opType === "remove_hyperlane_segment" || opType === "create_route" || opType === "delete_route" || opType === "update_route_metadata" || opType === "add_minor_route" || opType === "remove_minor_route") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      if (opType === "add_hyperlane_segment") {
+        return dm4ApplyAddHyperlaneSegment(db5, job, strict);
       }
-      if (opType === "create_sector" || opType === "delete_sector" || opType === "rename_sector") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      if (opType === "remove_hyperlane_segment") {
+        return dm4ApplyRemoveHyperlaneSegment(db5, job, strict);
+      }
+      if (opType === "create_route") {
+        return dm4ApplyCreateRoute(db5, job, strict);
+      }
+      if (opType === "delete_route") {
+        return dm4ApplyDeleteRoute(db5, job, strict);
+      }
+      if (opType === "update_route_metadata") {
+        return dm4ApplyUpdateRouteMetadata(db5, job, strict);
+      }
+      if (opType === "add_minor_route") {
+        return dm4ApplyAddMinorRoute(db5, job, strict);
+      }
+      if (opType === "remove_minor_route") {
+        return dm4ApplyRemoveMinorRoute(db5, job, strict);
+      }
+      if (opType === "create_sector") {
+        return dm4ApplyCreateSector(db5, job, strict);
+      }
+      if (opType === "delete_sector") {
+        return dm4ApplyDeleteSector(db5, job, strict);
+      }
+      if (opType === "rename_sector") {
+        return dm4ApplyRenameSector(db5, job, strict);
       }
       if (opType === "update_dataset_metadata") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+        return dm4ApplyUpdateDatasetMetadata(db5, job, strict);
       }
       var msg = "Unsupported op_type '" + opType + "'. Job skipped.";
       if (strict) throw new Error(msg);

@@ -1199,6 +1199,27 @@ function initMapLayer(core, root) {
   }
   window.addEventListener("resize", handleResize);
 
+  // Update cursor based on editor mode
+  function updateCursorForEditorMode() {
+    var st = core.state.getState();
+    var editorState = st.editor || {};
+    var editorMode = editorState.mode;
+    
+    if (editorMode === "add_system" || editorMode === "move_system") {
+      mapContainer.style.cursor = "crosshair";
+    } else if (!isPanning) {
+      mapContainer.style.cursor = "grab";
+    }
+  }
+
+  // Subscribe to editor state changes to update cursor
+  core.state.subscribe(function (st) {
+    updateCursorForEditorMode();
+  }, ["editor"]);
+
+  // Initial cursor update
+  updateCursorForEditorMode();
+
   // Panning
   let isPanning = false;
   let hasDragged = false;
@@ -1251,17 +1272,90 @@ function initMapLayer(core, root) {
       return;
     }
 
+    // Calculate world coordinates for any click
+    var rect = mapContainer.getBoundingClientRect();
+    var cx = e.clientX - rect.left;
+    var cy = e.clientY - rect.top;
+    var worldX = (cx - translateX) / zoom;
+    var worldY = (cy - translateY) / zoom;
+    var px = Math.round(worldX);
+    var py = Math.round(worldY);
+
+    // Check if editor mode is active
+    var st = core.state.getState();
+    var editorState = st.editor || {};
+    var editorMode = editorState.mode;
+
+    // Handle editor modes first (before ctrl+click)
+    if (editorMode === "add_system") {
+      // Add system mode: prompt for system details
+      var systemId = prompt("Enter system ID:");
+      if (!systemId) return;
+      
+      var sectorName = prompt("Enter sector name:", "Unknown Sector");
+      if (!sectorName) sectorName = "Unknown Sector";
+
+      var datasetId = (typeof window !== "undefined" && window.DM4_CURRENT_DATASET_ID) || "main";
+      var job = {
+        target_dataset: datasetId,
+        op_type: "add_system",
+        payload: {
+          system_id: systemId,
+          coords: [px, py],
+          sector: sectorName
+        },
+        created_at: new Date().toISOString()
+      };
+
+      if (core.state.actions && typeof core.state.actions.addEditorJob === "function") {
+        core.state.actions.addEditorJob(job);
+      }
+      
+      // Clear editor mode after adding
+      if (core.state.actions && typeof core.state.actions.clearEditorMode === "function") {
+        core.state.actions.clearEditorMode();
+      }
+      return;
+    }
+
+    if (editorMode === "move_system") {
+      // Move system mode: create move job for pending system
+      var pendingData = editorState.pendingData || {};
+      var systemId = pendingData.system_id;
+      
+      if (!systemId) {
+        DM4.Logger.warn("[MAP] move_system mode active but no system_id in pendingData");
+        if (core.state.actions && typeof core.state.actions.clearEditorMode === "function") {
+          core.state.actions.clearEditorMode();
+        }
+        return;
+      }
+
+      var datasetId = (typeof window !== "undefined" && window.DM4_CURRENT_DATASET_ID) || "main";
+      var job = {
+        target_dataset: datasetId,
+        op_type: "move_system",
+        payload: {
+          system_id: systemId,
+          new_coords: [px, py]
+        },
+        created_at: new Date().toISOString()
+      };
+
+      if (core.state.actions && typeof core.state.actions.addEditorJob === "function") {
+        core.state.actions.addEditorJob(job);
+      }
+      
+      // Clear editor mode after moving
+      if (core.state.actions && typeof core.state.actions.clearEditorMode === "function") {
+        core.state.actions.clearEditorMode();
+      }
+      return;
+    }
+
     // Ctrl+click: copy parsec/pixel coordinates and update top bar readout
     if (e.ctrlKey || e.metaKey) {
-      const rect = mapContainer.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-
-      const worldX = (cx - translateX) / zoom;
-      const worldY = (cy - translateY) / zoom;
-      const px = Math.round(worldX);
-      const py = Math.round(worldY);
-      const coordText = px + "," + py;
+      var coordText = px + "," + py;
 
       if (core && core.topBarCoords) {
         core.topBarCoords.textContent = "Parsec Coordinates: " + coordText;
@@ -1277,7 +1371,7 @@ function initMapLayer(core, root) {
       return;
     }
 
-    const target = e.target;
+    var target = e.target;
     if (target && typeof target.closest === "function") {
       if (target.closest(".dm-system-marker") || target.closest(".dm-system-label")) {
         return;

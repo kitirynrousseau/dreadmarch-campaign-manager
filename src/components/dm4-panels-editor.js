@@ -1308,10 +1308,430 @@ function EditorPanel(core) {
 
     // Render ROUTES tab
     function renderRoutesTab(container, st, systems, hyperlanes, jobs) {
-      var line = document.createElement("div");
-      line.classList.add("dm4-editor-line", "dm-text-body");
-      line.textContent = "Routes management - Coming soon";
-      container.appendChild(line);
+      container.innerHTML = "";
+      
+      var routeMeta = (st.dataset && st.dataset.route_metadata) || {};
+      var systemIds = Object.keys(systems).sort();
+      var routeNames = Object.keys(hyperlanes).filter(function(name) {
+        return name !== "minor_routes";
+      }).sort();
+      
+      // --- NAMED HYPERLANES SECTION ---
+      var hyperlaneSection = document.createElement("div");
+      hyperlaneSection.classList.add("dm4-editor-subsection");
+      
+      var hyperlaneTitle = document.createElement("div");
+      hyperlaneTitle.classList.add("dm4-editor-line", "dm-text-header");
+      hyperlaneTitle.textContent = "NAMED HYPERLANES";
+      hyperlaneSection.appendChild(hyperlaneTitle);
+      
+      // Route selector row
+      var selectorRow = document.createElement("div");
+      selectorRow.classList.add("dm4-editor-line", "dm-text-body");
+      
+      var routeSelect = document.createElement("select");
+      routeSelect.classList.add("dm4-editor-select");
+      
+      var defaultOpt = document.createElement("option");
+      defaultOpt.value = "";
+      defaultOpt.textContent = "Select route...";
+      routeSelect.appendChild(defaultOpt);
+      
+      routeNames.forEach(function(name) {
+        var meta = routeMeta[name] || {};
+        var cls = meta.route_class || "medium";
+        var opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name + " (" + cls + ")";
+        routeSelect.appendChild(opt);
+      });
+      
+      selectorRow.appendChild(routeSelect);
+      
+      // [+ New] button
+      var newRouteBtn = document.createElement("button");
+      newRouteBtn.type = "button";
+      newRouteBtn.textContent = "+ New";
+      newRouteBtn.classList.add("dm4-editor-button");
+      selectorRow.appendChild(newRouteBtn);
+      
+      hyperlaneSection.appendChild(selectorRow);
+      
+      // New route form (hidden by default)
+      var newRouteForm = document.createElement("div");
+      newRouteForm.classList.add("dm4-editor-new-route-form");
+      newRouteForm.style.display = "none";
+      
+      var newRouteNameLabel = document.createElement("div");
+      newRouteNameLabel.classList.add("dm4-editor-line", "dm-text-body");
+      newRouteNameLabel.textContent = "Route Name: ";
+      
+      var newRouteNameInput = document.createElement("input");
+      newRouteNameInput.type = "text";
+      newRouteNameInput.classList.add("dm4-editor-input");
+      newRouteNameInput.placeholder = "Enter route name";
+      newRouteNameLabel.appendChild(newRouteNameInput);
+      newRouteForm.appendChild(newRouteNameLabel);
+      
+      var newRouteClassLabel = document.createElement("div");
+      newRouteClassLabel.classList.add("dm4-editor-line", "dm-text-body");
+      newRouteClassLabel.textContent = "Class: ";
+      
+      var newRouteClassSelect = document.createElement("select");
+      newRouteClassSelect.classList.add("dm4-editor-select");
+      ["medium", "major"].forEach(function(cls) {
+        var opt = document.createElement("option");
+        opt.value = cls;
+        opt.textContent = cls;
+        newRouteClassSelect.appendChild(opt);
+      });
+      newRouteClassLabel.appendChild(newRouteClassSelect);
+      
+      var createRouteBtn = document.createElement("button");
+      createRouteBtn.type = "button";
+      createRouteBtn.textContent = "Create";
+      createRouteBtn.classList.add("dm4-editor-button");
+      createRouteBtn.addEventListener("click", function() {
+        var newName = newRouteNameInput.value.trim();
+        if (!newName) {
+          alert("Please enter a route name");
+          return;
+        }
+        if (routeNames.indexOf(newName) >= 0) {
+          alert("Route '" + newName + "' already exists");
+          return;
+        }
+        
+        var datasetId = getCurrentDatasetId();
+        var job = {
+          target_dataset: datasetId,
+          op_type: "create_route",
+          payload: {
+            route_name: newName,
+            route_class: newRouteClassSelect.value,
+            segments: []
+          },
+          created_at: new Date().toISOString()
+        };
+        
+        if (state.actions && typeof state.actions.addEditorJob === "function") {
+          state.actions.addEditorJob(job);
+        }
+        
+        // Clear form and hide it
+        newRouteNameInput.value = "";
+        newRouteForm.style.display = "none";
+        
+        // Select the newly created route
+        setTimeout(function() {
+          routeSelect.value = newName;
+          renderRouteDetails(routeDetails, newName, hyperlanes, routeMeta, systemIds, state);
+        }, 100);
+      });
+      newRouteClassLabel.appendChild(createRouteBtn);
+      newRouteForm.appendChild(newRouteClassLabel);
+      
+      hyperlaneSection.appendChild(newRouteForm);
+      
+      // Selected route details (shown when route selected)
+      var routeDetails = document.createElement("div");
+      routeDetails.classList.add("dm4-editor-route-details");
+      hyperlaneSection.appendChild(routeDetails);
+      
+      container.appendChild(hyperlaneSection);
+      
+      // --- MINOR ROUTES SECTION ---
+      var minorSection = document.createElement("div");
+      minorSection.classList.add("dm4-editor-subsection");
+      
+      var minorTitle = document.createElement("div");
+      minorTitle.classList.add("dm4-editor-line", "dm-text-header");
+      minorTitle.textContent = "MINOR ROUTES";
+      minorSection.appendChild(minorTitle);
+      
+      // Add minor route form
+      var addMinorRow = document.createElement("div");
+      addMinorRow.classList.add("dm4-editor-line", "dm-text-body");
+      
+      var minorFromSelect = document.createElement("select");
+      minorFromSelect.classList.add("dm4-editor-select");
+      var minorToSelect = document.createElement("select");
+      minorToSelect.classList.add("dm4-editor-select");
+      
+      var defaultMinorFrom = document.createElement("option");
+      defaultMinorFrom.value = "";
+      defaultMinorFrom.textContent = "From...";
+      minorFromSelect.appendChild(defaultMinorFrom);
+      
+      var defaultMinorTo = document.createElement("option");
+      defaultMinorTo.value = "";
+      defaultMinorTo.textContent = "To...";
+      minorToSelect.appendChild(defaultMinorTo);
+      
+      systemIds.forEach(function(id) {
+        var optFrom = document.createElement("option");
+        optFrom.value = id;
+        optFrom.textContent = id;
+        minorFromSelect.appendChild(optFrom);
+        
+        var optTo = document.createElement("option");
+        optTo.value = id;
+        optTo.textContent = id;
+        minorToSelect.appendChild(optTo);
+      });
+      
+      addMinorRow.appendChild(minorFromSelect);
+      addMinorRow.appendChild(document.createTextNode(" ↔ "));
+      addMinorRow.appendChild(minorToSelect);
+      
+      var addMinorBtn = document.createElement("button");
+      addMinorBtn.type = "button";
+      addMinorBtn.textContent = "Add";
+      addMinorBtn.classList.add("dm4-editor-button");
+      addMinorBtn.addEventListener("click", function() {
+        if (minorFromSelect.value && minorToSelect.value && minorFromSelect.value !== minorToSelect.value) {
+          var datasetId = getCurrentDatasetId();
+          state.actions.addEditorJob({
+            target_dataset: datasetId,
+            op_type: "add_minor_route",
+            payload: { from_system: minorFromSelect.value, to_system: minorToSelect.value },
+            created_at: new Date().toISOString()
+          });
+        }
+      });
+      addMinorRow.appendChild(addMinorBtn);
+      minorSection.appendChild(addMinorRow);
+      
+      // Show existing minor routes for selected system
+      var selId = st.selection && st.selection.system;
+      if (selId) {
+        var minorRoutes = hyperlanes.minor_routes || [];
+        var connectedMinors = minorRoutes.filter(function(seg) {
+          return seg[0] === selId || seg[1] === selId;
+        });
+        
+        if (connectedMinors.length > 0) {
+          var minorListTitle = document.createElement("div");
+          minorListTitle.classList.add("dm4-editor-line", "dm-text-body");
+          minorListTitle.textContent = "Connected to " + selId + ":";
+          minorSection.appendChild(minorListTitle);
+          
+          connectedMinors.forEach(function(seg) {
+            var other = seg[0] === selId ? seg[1] : seg[0];
+            var minorLine = document.createElement("div");
+            minorLine.classList.add("dm4-editor-line", "dm-text-body");
+            minorLine.textContent = "  → " + other + " ";
+            
+            var removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.textContent = "×";
+            removeBtn.classList.add("dm4-editor-button", "dm4-editor-remove-btn");
+            removeBtn.addEventListener("click", function() {
+              var datasetId = getCurrentDatasetId();
+              state.actions.addEditorJob({
+                target_dataset: datasetId,
+                op_type: "remove_minor_route",
+                payload: { from_system: selId, to_system: other },
+                created_at: new Date().toISOString()
+              });
+            });
+            minorLine.appendChild(removeBtn);
+            minorSection.appendChild(minorLine);
+          });
+        }
+      }
+      
+      container.appendChild(minorSection);
+      
+      // Event handlers
+      routeSelect.addEventListener("change", function() {
+        renderRouteDetails(routeDetails, routeSelect.value, hyperlanes, routeMeta, systemIds, state);
+      });
+      
+      newRouteBtn.addEventListener("click", function() {
+        newRouteForm.style.display = newRouteForm.style.display === "none" ? "block" : "none";
+      });
+    }
+
+    // Helper function to render route details
+    function renderRouteDetails(container, routeName, hyperlanes, routeMeta, systemIds, state) {
+      container.innerHTML = "";
+      
+      if (!routeName) return;
+      
+      var segments = hyperlanes[routeName] || [];
+      var meta = routeMeta[routeName] || {};
+      var currentClass = meta.route_class || "medium";
+      
+      // Route name display
+      var nameRow = document.createElement("div");
+      nameRow.classList.add("dm4-editor-line", "dm-text-body");
+      nameRow.textContent = "Route: " + routeName;
+      container.appendChild(nameRow);
+      
+      // Class selector
+      var classRow = document.createElement("div");
+      classRow.classList.add("dm4-editor-line", "dm-text-body");
+      classRow.textContent = "Class: ";
+      
+      var classSelect = document.createElement("select");
+      classSelect.classList.add("dm4-editor-select");
+      ["major", "medium"].forEach(function(cls) {
+        var opt = document.createElement("option");
+        opt.value = cls;
+        opt.textContent = cls;
+        if (cls === currentClass) opt.selected = true;
+        classSelect.appendChild(opt);
+      });
+      classRow.appendChild(classSelect);
+      
+      var updateClassBtn = document.createElement("button");
+      updateClassBtn.type = "button";
+      updateClassBtn.textContent = "Update";
+      updateClassBtn.classList.add("dm4-editor-button");
+      updateClassBtn.addEventListener("click", function() {
+        if (classSelect.value !== currentClass) {
+          var datasetId = getCurrentDatasetId();
+          state.actions.addEditorJob({
+            target_dataset: datasetId,
+            op_type: "update_route_metadata",
+            payload: { route_name: routeName, route_class: classSelect.value },
+            created_at: new Date().toISOString()
+          });
+        }
+      });
+      classRow.appendChild(updateClassBtn);
+      container.appendChild(classRow);
+      
+      // Segments list
+      var segTitle = document.createElement("div");
+      segTitle.classList.add("dm4-editor-line", "dm-text-body");
+      segTitle.textContent = "Segments (" + segments.length + "):";
+      container.appendChild(segTitle);
+      
+      segments.forEach(function(seg) {
+        var segLine = document.createElement("div");
+        segLine.classList.add("dm4-editor-line", "dm-text-body");
+        segLine.textContent = "  " + seg[0] + " ↔ " + seg[1] + " ";
+        
+        var removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.textContent = "×";
+        removeBtn.classList.add("dm4-editor-button", "dm4-editor-remove-btn");
+        removeBtn.addEventListener("click", function() {
+          var datasetId = getCurrentDatasetId();
+          state.actions.addEditorJob({
+            target_dataset: datasetId,
+            op_type: "remove_hyperlane_segment",
+            payload: { route_name: routeName, from_system: seg[0], to_system: seg[1] },
+            created_at: new Date().toISOString()
+          });
+        });
+        segLine.appendChild(removeBtn);
+        container.appendChild(segLine);
+      });
+      
+      // Add segment form
+      var addSegTitle = document.createElement("div");
+      addSegTitle.classList.add("dm4-editor-line", "dm-text-body");
+      addSegTitle.textContent = "Add Segment:";
+      container.appendChild(addSegTitle);
+      
+      var addSegRow = document.createElement("div");
+      addSegRow.classList.add("dm4-editor-line", "dm-text-body");
+      
+      var fromSelect = document.createElement("select");
+      fromSelect.classList.add("dm4-editor-select");
+      var toSelect = document.createElement("select");
+      toSelect.classList.add("dm4-editor-select");
+      
+      var defaultFrom = document.createElement("option");
+      defaultFrom.value = "";
+      defaultFrom.textContent = "From...";
+      fromSelect.appendChild(defaultFrom);
+      
+      var defaultTo = document.createElement("option");
+      defaultTo.value = "";
+      defaultTo.textContent = "To...";
+      toSelect.appendChild(defaultTo);
+      
+      systemIds.forEach(function(id) {
+        var optFrom = document.createElement("option");
+        optFrom.value = id;
+        optFrom.textContent = id;
+        fromSelect.appendChild(optFrom);
+        
+        var optTo = document.createElement("option");
+        optTo.value = id;
+        optTo.textContent = id;
+        toSelect.appendChild(optTo);
+      });
+      
+      addSegRow.appendChild(fromSelect);
+      addSegRow.appendChild(document.createTextNode(" ↔ "));
+      addSegRow.appendChild(toSelect);
+      
+      var addSegBtn = document.createElement("button");
+      addSegBtn.type = "button";
+      addSegBtn.textContent = "Add";
+      addSegBtn.classList.add("dm4-editor-button");
+      addSegBtn.addEventListener("click", function() {
+        if (fromSelect.value && toSelect.value && fromSelect.value !== toSelect.value) {
+          var datasetId = getCurrentDatasetId();
+          state.actions.addEditorJob({
+            target_dataset: datasetId,
+            op_type: "add_hyperlane_segment",
+            payload: { route_name: routeName, from_system: fromSelect.value, to_system: toSelect.value },
+            created_at: new Date().toISOString()
+          });
+        }
+      });
+      addSegRow.appendChild(addSegBtn);
+      container.appendChild(addSegRow);
+      
+      // Map mode checkbox
+      var mapModeRow = document.createElement("div");
+      mapModeRow.classList.add("dm4-editor-line", "dm-text-body");
+      var mapModeCheck = document.createElement("input");
+      mapModeCheck.type = "checkbox";
+      mapModeCheck.classList.add("dm4-editor-checkbox");
+      mapModeCheck.id = "add-segment-map-mode";
+      var mapModeLabel = document.createElement("label");
+      mapModeLabel.htmlFor = "add-segment-map-mode";
+      mapModeLabel.textContent = " Click on map to select systems";
+      mapModeRow.appendChild(mapModeCheck);
+      mapModeRow.appendChild(mapModeLabel);
+      
+      mapModeCheck.addEventListener("change", function() {
+        if (mapModeCheck.checked) {
+          state.actions.setEditorMode("add_segment", { route_name: routeName, from_system: null });
+        } else {
+          state.actions.clearEditorMode();
+        }
+      });
+      container.appendChild(mapModeRow);
+      
+      // Delete route button
+      var deleteRow = document.createElement("div");
+      deleteRow.classList.add("dm4-editor-line", "dm-text-body");
+      deleteRow.style.marginTop = "0.5rem";
+      var deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.textContent = "Delete Route";
+      deleteBtn.classList.add("dm4-editor-button", "dm4-editor-delete-btn");
+      deleteBtn.addEventListener("click", function() {
+        if (confirm("Delete route '" + routeName + "' and all its segments?")) {
+          var datasetId = getCurrentDatasetId();
+          state.actions.addEditorJob({
+            target_dataset: datasetId,
+            op_type: "delete_route",
+            payload: { route_name: routeName },
+            created_at: new Date().toISOString()
+          });
+        }
+      });
+      deleteRow.appendChild(deleteBtn);
+      container.appendChild(deleteRow);
     }
 
     // Render SECTORS tab

@@ -406,3 +406,66 @@
   text-transform: uppercase;
 }
 
+/* Editor subsections (for ROUTES tab) */
+.dm4-editor-subsection {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(226, 58, 58, 0.2);
+}
+
+.dm4-editor-route-details {
+  margin-top: 0.5rem;
+}
+
+.dm4-editor-remove-btn {
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 4px;
+}
+
+.dm4-editor-new-route-form {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  border-radius: 3px;
+}
+
+.dm4-editor-select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--dm-color-muted);
+  color: var(--dm-color-body);
+  padding: 2px 6px;
+  font-size: var(--dm-font-small);
+  margin-right: 4px;
+}
+
+.dm4-editor-select:focus {
+  border-color: var(--dm-color-header);
+  outline: none;
+}
+
+.dm4-editor-button {
+  background: rgba(226, 58, 58, 0.2);
+  border: 1px solid var(--dm-color-muted);
+  color: var(--dm-color-body);
+  padding: 2px 8px;
+  font-size: var(--dm-font-small);
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.dm4-editor-button:hover {
+  background: rgba(226, 58, 58, 0.35);
+  border-color: var(--dm-color-header);
+}
+
+.dm4-editor-build-btn {
+  background: rgba(60, 180, 60, 0.2);
+  border-color: #4a4;
+}
+
+.dm4-editor-build-btn:hover {
+  background: rgba(60, 180, 60, 0.4);
+}
+

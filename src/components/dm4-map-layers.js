@@ -107,10 +107,49 @@
 
         marker.addEventListener("click", function (e) {
           e.stopPropagation();
+          
+          // Check if add_segment editor mode is active
+          var st = core.state.getState();
+          var editorState = st.editor || {};
+          var editorMode = editorState.mode;
+          var pendingData = editorState.pendingData || {};
+          
+          if (editorMode === "add_segment") {
+            var routeName = pendingData.route_name;
+            
+            if (!pendingData.from_system) {
+              // First click - set from_system
+              core.state.actions.setEditorMode("add_segment", { 
+                route_name: routeName, 
+                from_system: id 
+              });
+              // Visual feedback will be handled by marker styling
+              return;
+            } else {
+              // Second click - create the segment job
+              var fromSystem = pendingData.from_system;
+              var toSystem = id;
+              
+              if (fromSystem !== toSystem) {
+                var datasetId = (typeof window !== "undefined" && window.DM4_CURRENT_DATASET_ID) || "main";
+                core.state.actions.addEditorJob({
+                  target_dataset: datasetId,
+                  op_type: "add_hyperlane_segment",
+                  payload: { route_name: routeName, from_system: fromSystem, to_system: toSystem },
+                  created_at: new Date().toISOString()
+                });
+              }
+              
+              // Reset mode for next segment (keep add_segment mode active)
+              core.state.actions.setEditorMode("add_segment", { route_name: routeName, from_system: null });
+              return;
+            }
+          }
+          
+          // Normal system selection behavior
           core.state.actions.selectSystem(id);
 
           try {
-            var st = core.state.getState();
             if (
               st &&
               st.editor &&
@@ -1213,7 +1252,7 @@ function initMapLayer(core, root) {
     var editorState = st.editor || {};
     var editorMode = editorState.mode;
     
-    if (editorMode === "add_system" || editorMode === "move_system") {
+    if (editorMode === "add_system" || editorMode === "move_system" || editorMode === "add_segment") {
       mapContainer.style.cursor = "crosshair";
     } else if (!isPanning) {
       mapContainer.style.cursor = "grab";

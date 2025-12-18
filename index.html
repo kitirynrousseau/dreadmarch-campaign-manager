@@ -592,6 +592,23 @@
   <script src="src/core/dm4-dataset-core.js"></script>
 
   <script src="src/core/dm4-dataset-main.js"></script>
+  
+  <script>
+    // Restore dataset from localStorage if available
+    (function() {
+      try {
+        var savedDataset = localStorage.getItem("DM4_PATCHED_DATASET");
+        if (savedDataset) {
+          var parsed = JSON.parse(savedDataset);
+          window.DM4_DATASETS.main = parsed;
+          DM4.Logger.log("[EDITOR] Restored dataset from localStorage");
+        }
+      } catch (e) {
+        DM4.Logger.warn("[EDITOR] Failed to restore from localStorage:", e);
+      }
+    })();
+  </script>
+  
   <script src="src/utils/dm4-style-core.js"></script>
   <script src="src/core/dm4-state.js"></script>
   <script src="src/components/dm4-map-layers.js"></script>

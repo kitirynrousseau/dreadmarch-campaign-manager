@@ -2162,6 +2162,14 @@ function EditorPanel(core) {
             state.actions.clearEditorJobs();
           }
 
+          // Save to localStorage after successful apply
+          try {
+            localStorage.setItem("DM4_PATCHED_DATASET", JSON.stringify(db5));
+            DM4.Logger.log("[EDITOR] Dataset saved to localStorage");
+          } catch (e) {
+            DM4.Logger.warn("[EDITOR] Failed to save to localStorage:", e);
+          }
+
           if (logs && logs.length) {
             DM4.Logger.log("[EDITOR] Changes applied. Summary:");
             for (var i = 0; i < logs.length; i++) {
@@ -2170,100 +2178,117 @@ function EditorPanel(core) {
             alert("Changes applied successfully! Check console for details.");
           }
         });
-
-        var buildBtn = document.createElement("button");
-        buildBtn.type = "button";
-        buildBtn.textContent = "Build Patched Dataset";
-        buildBtn.classList.add("dm4-editor-button", "dm4-editor-build-btn");
-        controls.appendChild(buildBtn);
-
-        buildBtn.addEventListener("click", function () {
-          var st = state.getState ? state.getState() : null;
-          if (!st || !st.editor) {
-            alert("No editor state available to build patch.");
-            return;
-          }
-          var editorState = st.editor || { jobs: [] };
-          var jobs = editorState.jobs || [];
-          if (!jobs.length) {
-            alert("No pending editor jobs to apply.");
-            return;
-          }
-
-          var datasetId = getCurrentDatasetId();
-          var currentDb5 = st.dataset || {};
-          // Clone dataset so we don't mutate state directly if patch fails
-          var db5;
-          try {
-            db5 = JSON.parse(JSON.stringify(currentDb5));
-          } catch (e) {
-            DM4.Logger.error("[EDITOR] Failed to clone dataset for patch:", e);
-            alert("Failed to clone dataset for patch. See console for details.");
-            return;
-          }
-
-          var logs;
-          try {
-            logs = dm4ApplyJobsToDb5(db5, jobs, datasetId, true);
-          } catch (e) {
-            DM4.Logger.error("[EDITOR] Patch failed:", e);
-            alert("Patch failed: " + (e && e.message ? e.message : String(e)));
-            return;
-          }
-
-          // Apply patched dataset to viewer state
-          if (state.actions && typeof state.actions.setDataset === "function") {
-            state.actions.setDataset(db5);
-          }
-
-          // Also update in-memory DM4_DATASETS cache for this session if present
-          try {
-            if (
-              typeof window !== "undefined" &&
-              window.DM4_DATASETS &&
-              window.DM4_DATASETS[datasetId]
-            ) {
-              window.DM4_DATASETS[datasetId] = db5;
-            }
-          } catch (e) {
-            DM4.Logger.warn("[EDITOR] Failed to update DM4_DATASETS cache:", e);
-          }
-
-          // Clear editor jobs after successful patch
-          if (
-            state.actions &&
-            typeof state.actions.clearEditorJobs === "function"
-          ) {
-            state.actions.clearEditorJobs();
-          }
-
-          // Download patched DB5 as a JSON file
-          try {
-            var blob = new Blob([JSON.stringify(db5, null, 2)], {
-              type: "application/json"
-            });
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement("a");
-            var stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 13);
-            var baseName = (datasetId || "main").toUpperCase();
-            a.href = url;
-            a.download = "DB5_" + baseName + "_Patched_" + stamp + ".json";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          } catch (e) {
-            DM4.Logger.error("[EDITOR] Failed to download patched DB5:", e);
-          }
-
-          if (logs && logs.length) {
-            DM4.Logger.log("[EDITOR] Patch applied. Summary:");
-            for (var i = 0; i < logs.length; i++) {
-              DM4.Logger.log("  " + logs[i]);
-            }
-          }
-        });
       }
+      
+      // DATASET section - always visible
+      var datasetSectionTitle = document.createElement("div");
+      datasetSectionTitle.classList.add("dm4-editor-section-title", "dm-text-header");
+      datasetSectionTitle.textContent = "DATASET";
+      datasetSectionTitle.style.marginTop = "0.5rem";
+      container.appendChild(datasetSectionTitle);
+
+      var datasetControls = document.createElement("div");
+      datasetControls.classList.add("dm4-editor-line", "dm-text-body");
+      container.appendChild(datasetControls);
+
+      // Export Dataset button - downloads current dataset
+      var exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.textContent = "Export";
+      exportBtn.classList.add("dm4-editor-button");
+      datasetControls.appendChild(exportBtn);
+
+      exportBtn.addEventListener("click", function () {
+        var st = state.getState ? state.getState() : null;
+        if (!st || !st.dataset) {
+          alert("No dataset available to export.");
+          return;
+        }
+
+        var datasetId = getCurrentDatasetId();
+        var dataset = st.dataset || {};
+
+        try {
+          var blob = new Blob([JSON.stringify(dataset, null, 2)], {
+            type: "application/json"
+          });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          var stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 13);
+          var baseName = (datasetId || "main").toUpperCase();
+          a.href = url;
+          a.download = "DB5_" + baseName + "_" + stamp + ".json";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          DM4.Logger.log("[EDITOR] Dataset exported successfully");
+        } catch (e) {
+          DM4.Logger.error("[EDITOR] Failed to export dataset:", e);
+          alert("Failed to export dataset. See console for details.");
+        }
+      });
+
+      // Import Dataset button - opens file picker
+      var importBtn = document.createElement("button");
+      importBtn.type = "button";
+      importBtn.textContent = "Import";
+      importBtn.classList.add("dm4-editor-button");
+      datasetControls.appendChild(importBtn);
+
+      importBtn.addEventListener("click", function () {
+        var input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+        input.addEventListener("change", function (e) {
+          var file = e.target.files[0];
+          if (!file) return;
+
+          var reader = new FileReader();
+          reader.onload = function (evt) {
+            try {
+              var newDataset = JSON.parse(evt.target.result);
+              // Validate basic structure
+              if (!newDataset.systems || typeof newDataset.systems !== "object") {
+                alert("Invalid dataset: missing 'systems' object");
+                return;
+              }
+              // Update global registry
+              var datasetId = getCurrentDatasetId();
+              window.DM4_DATASETS[datasetId] = newDataset;
+              // Normalize and set in state
+              var normalized = DM4.dataset.normalize(newDataset);
+              state.actions.setDataset(normalized);
+              DM4.Logger.log("[EDITOR] Dataset imported successfully");
+              alert("Dataset imported successfully!");
+            } catch (err) {
+              alert("Failed to parse dataset: " + err.message);
+              DM4.Logger.error("[EDITOR] Import failed:", err);
+            }
+          };
+          reader.readAsText(file);
+        });
+        input.click();
+      });
+
+      // Reset to Default button - clears localStorage and reloads
+      var resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.textContent = "Reset to Default";
+      resetBtn.classList.add("dm4-editor-button", "dm4-editor-delete-btn");
+      datasetControls.appendChild(resetBtn);
+
+      resetBtn.addEventListener("click", function () {
+        if (!confirm("Reset to default dataset? This will discard all changes.")) {
+          return;
+        }
+
+        // Clear localStorage
+        localStorage.removeItem("DM4_PATCHED_DATASET");
+
+        // Reload page to get original bundled dataset
+        window.location.reload();
+      });
     }
 
     const unsubscribe = state.subscribe(function (st) {

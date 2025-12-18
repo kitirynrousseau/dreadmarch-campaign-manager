@@ -67,6 +67,19 @@
       if (opType === "change_sector") {
         return dm4ApplyChangeSector(db5, job, strict);
       }
+      // Placeholder support for new operations - will be fully implemented
+      if (opType === "add_system" || opType === "delete_system" || opType === "update_system" || opType === "move_system") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      }
+      if (opType === "add_hyperlane_segment" || opType === "remove_hyperlane_segment" || opType === "create_route" || opType === "delete_route" || opType === "update_route_metadata" || opType === "add_minor_route" || opType === "remove_minor_route") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      }
+      if (opType === "create_sector" || opType === "delete_sector" || opType === "rename_sector") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      }
+      if (opType === "update_dataset_metadata") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      }
       var msg = "Unsupported op_type '" + opType + "'. Job skipped.";
       if (strict) throw new Error(msg);
       return { applied: false, message: msg };
@@ -203,12 +216,74 @@ function EditorPanel(core) {
       var t = job.op_type || job.type || "unknown";
       var target = job.target_dataset || job.dataset || getCurrentDatasetId();
       var payload = job.payload || {};
+      
       if (t === "change_sector") {
         var sid = payload.system_id || "?";
         var oldS = payload.old_sector_id || payload.oldSector || "?";
         var newS = payload.new_sector_id || payload.newSector || "?";
         return "[" + target + "] change_sector: " + sid + " " + oldS + " → " + newS;
       }
+      
+      if (t === "add_system") {
+        return "[" + target + "] add_system: " + (payload.system_id || "?") + " at (" + (payload.coords ? payload.coords[0] : "?") + "," + (payload.coords ? payload.coords[1] : "?") + ")";
+      }
+      
+      if (t === "delete_system") {
+        return "[" + target + "] delete_system: " + (payload.system_id || "?");
+      }
+      
+      if (t === "update_system") {
+        return "[" + target + "] update_system: " + (payload.system_id || "?");
+      }
+      
+      if (t === "move_system") {
+        return "[" + target + "] move_system: " + (payload.system_id || "?") + " to (" + (payload.new_coords ? payload.new_coords[0] : "?") + "," + (payload.new_coords ? payload.new_coords[1] : "?") + ")";
+      }
+      
+      if (t === "add_hyperlane_segment") {
+        return "[" + target + "] add_hyperlane_segment: " + (payload.from_system || "?") + " ↔ " + (payload.to_system || "?") + " on " + (payload.route_name || "?");
+      }
+      
+      if (t === "remove_hyperlane_segment") {
+        return "[" + target + "] remove_hyperlane_segment: " + (payload.from_system || "?") + " ↔ " + (payload.to_system || "?") + " from " + (payload.route_name || "?");
+      }
+      
+      if (t === "create_route") {
+        return "[" + target + "] create_route: " + (payload.route_name || "?") + " (" + (payload.route_class || "medium") + ")";
+      }
+      
+      if (t === "delete_route") {
+        return "[" + target + "] delete_route: " + (payload.route_name || "?");
+      }
+      
+      if (t === "update_route_metadata") {
+        return "[" + target + "] update_route_metadata: " + (payload.route_name || "?");
+      }
+      
+      if (t === "add_minor_route") {
+        return "[" + target + "] add_minor_route: " + (payload.from_system || "?") + " ↔ " + (payload.to_system || "?");
+      }
+      
+      if (t === "remove_minor_route") {
+        return "[" + target + "] remove_minor_route: " + (payload.from_system || "?") + " ↔ " + (payload.to_system || "?");
+      }
+      
+      if (t === "create_sector") {
+        return "[" + target + "] create_sector: " + (payload.sector_name || "?");
+      }
+      
+      if (t === "delete_sector") {
+        return "[" + target + "] delete_sector: " + (payload.sector_name || "?") + (payload.reassign_to ? " → " + payload.reassign_to : "");
+      }
+      
+      if (t === "rename_sector") {
+        return "[" + target + "] rename_sector: " + (payload.old_name || "?") + " → " + (payload.new_name || "?");
+      }
+      
+      if (t === "update_dataset_metadata") {
+        return "[" + target + "] update_dataset_metadata";
+      }
+      
       return "[" + target + "] " + t;
     }
 
@@ -269,6 +344,19 @@ function EditorPanel(core) {
       var opType = job.op_type || job.type;
       if (opType === "change_sector") {
         return dm4ApplyChangeSector(db5, job, strict);
+      }
+      // Placeholder support for new operations - will be fully implemented
+      if (opType === "add_system" || opType === "delete_system" || opType === "update_system" || opType === "move_system") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      }
+      if (opType === "add_hyperlane_segment" || opType === "remove_hyperlane_segment" || opType === "create_route" || opType === "delete_route" || opType === "update_route_metadata" || opType === "add_minor_route" || opType === "remove_minor_route") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      }
+      if (opType === "create_sector" || opType === "delete_sector" || opType === "rename_sector") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      }
+      if (opType === "update_dataset_metadata") {
+        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
       }
       var msg = "Unsupported op_type '" + opType + "'. Job skipped.";
       if (strict) throw new Error(msg);

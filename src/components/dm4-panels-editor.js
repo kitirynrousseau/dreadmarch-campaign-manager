@@ -862,15 +862,51 @@ function EditorPanel(core) {
     modeLine.classList.add("dm4-editor-line", "dm-text-header");
     inner.appendChild(modeLine);
 
-    // System / sector section
-    const sysSectionTitle = document.createElement("div");
-    sysSectionTitle.classList.add("dm4-editor-section-title", "dm-text-header");
-    sysSectionTitle.textContent = "SYSTEM & SECTOR";
-    inner.appendChild(sysSectionTitle);
+    // Editor mode indicator (when active)
+    const modeIndicator = document.createElement("div");
+    modeIndicator.classList.add("dm4-editor-mode-active");
+    modeIndicator.style.display = "none";
+    inner.appendChild(modeIndicator);
 
-    const sysContent = document.createElement("div");
-    sysContent.classList.add("dm4-editor-section");
-    inner.appendChild(sysContent);
+    // Tab buttons container
+    const tabsContainer = document.createElement("div");
+    tabsContainer.classList.add("dm4-editor-tabs");
+    inner.appendChild(tabsContainer);
+
+    var activeTab = "system";
+
+    var tabButtons = {
+      system: null,
+      routes: null,
+      sectors: null,
+      meta: null
+    };
+
+    ["system", "routes", "sectors", "meta"].forEach(function (tabName) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.classList.add("dm4-editor-tab");
+      btn.textContent = tabName.toUpperCase();
+      btn.dataset.tab = tabName;
+      if (tabName === activeTab) {
+        btn.classList.add("active");
+      }
+      btn.addEventListener("click", function () {
+        activeTab = tabName;
+        Object.keys(tabButtons).forEach(function (key) {
+          tabButtons[key].classList.remove("active");
+        });
+        btn.classList.add("active");
+        render(state.getState());
+      });
+      tabButtons[tabName] = btn;
+      tabsContainer.appendChild(btn);
+    });
+
+    // Tab content container
+    const tabContent = document.createElement("div");
+    tabContent.classList.add("dm4-editor-tab-content");
+    inner.appendChild(tabContent);
 
     // Pending edits section
     const jobsSectionTitle = document.createElement("div");
@@ -961,14 +997,24 @@ function EditorPanel(core) {
 
     // Reactive render
     function render(st) {
-      var editorState = st.editor || { enabled: false, jobs: [] };
+      var editorState = st.editor || { enabled: false, jobs: [], mode: null, pendingData: null };
       var editorOn = !!editorState.enabled;
       var jobs = editorState.jobs || [];
+      var editorMode = editorState.mode;
 
       modeLine.textContent = editorOn ? "EDITOR MODE: ON" : "EDITOR MODE: OFF";
 
+      // Show mode indicator if editor mode is active
+      if (editorMode) {
+        modeIndicator.style.display = "block";
+        modeIndicator.textContent = "MODE: " + editorMode.toUpperCase().replace("_", " ");
+      } else {
+        modeIndicator.style.display = "none";
+      }
+
       var dataset = st.dataset || {};
       var systems = dataset.systems || {};
+      var hyperlanes = dataset.hyperlanes || {};
       var selId = st.selection && st.selection.system;
 
       // Build a sector list from current dataset (unique, sorted)
@@ -982,9 +1028,140 @@ function EditorPanel(core) {
       });
       var sectorList = Object.keys(sectorSet).sort();
 
-      // Find latest pending sector change for selected system, if any
-      var pendingSector = null;
-      if (selId) {
+      // Render active tab
+      tabContent.innerHTML = "";
+      
+      if (activeTab === "system") {
+        renderSystemTab(tabContent, st, systems, selId, sectorList, jobs);
+      } else if (activeTab === "routes") {
+        renderRoutesTab(tabContent, st, systems, hyperlanes, jobs);
+      } else if (activeTab === "sectors") {
+        renderSectorsTab(tabContent, st, systems, sectorList, jobs);
+      } else if (activeTab === "meta") {
+        renderMetaTab(tabContent, st, dataset, systems, hyperlanes);
+      }
+
+      // JOBS SECTION (always visible)
+      renderJobsSection(jobsContent, jobs);
+    }
+
+    // Render SYSTEM tab
+    function renderSystemTab(container, st, systems, selId, sectorList, jobs) {
+      if (!selId || !systems[selId]) {
+        // No system selected
+        var noSel = document.createElement("div");
+        noSel.classList.add("dm4-editor-line", "dm-text-body");
+        noSel.textContent = "No system selected. Click a system marker to edit.";
+        container.appendChild(noSel);
+
+        // Add system mode checkbox
+        var addModeLine = document.createElement("div");
+        addModeLine.classList.add("dm4-editor-line", "dm-text-body");
+        container.appendChild(addModeLine);
+
+        var addModeCheckbox = document.createElement("input");
+        addModeCheckbox.type = "checkbox";
+        addModeCheckbox.classList.add("dm4-editor-checkbox");
+        addModeCheckbox.id = "add-system-mode-checkbox";
+        var editorState = st.editor || {};
+        if (editorState.mode === "add_system") {
+          addModeCheckbox.checked = true;
+        }
+        addModeLine.appendChild(addModeCheckbox);
+
+        var addModeLabel = document.createElement("label");
+        addModeLabel.setAttribute("for", "add-system-mode-checkbox");
+        addModeLabel.textContent = "Add System Mode (click on map to place)";
+        addModeLine.appendChild(addModeLabel);
+
+        addModeCheckbox.addEventListener("change", function () {
+          if (addModeCheckbox.checked) {
+            if (state.actions && typeof state.actions.setEditorMode === "function") {
+              state.actions.setEditorMode("add_system", null);
+            }
+          } else {
+            if (state.actions && typeof state.actions.clearEditorMode === "function") {
+              state.actions.clearEditorMode();
+            }
+          }
+        });
+      } else {
+        // System selected
+        var sys = systems[selId];
+        var name = sys.name || selId;
+        var sector = sys.sector || "Unknown Sector";
+        var grid = (sys.grid && sys.grid.grid) || "UNSPECIFIED";
+        var coords = sys.coords || [0, 0];
+        var editorNotes = sys.editor_notes || "";
+
+        // System name (editable)
+        var nameLine = document.createElement("div");
+        nameLine.classList.add("dm4-editor-line", "dm-text-body");
+        container.appendChild(nameLine);
+
+        var nameLabel = document.createElement("span");
+        nameLabel.textContent = "Name: ";
+        nameLine.appendChild(nameLabel);
+
+        var nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.classList.add("dm4-editor-input");
+        nameInput.value = name;
+        nameInput.style.width = "120px";
+        nameLine.appendChild(nameInput);
+
+        var updateNameBtn = document.createElement("button");
+        updateNameBtn.type = "button";
+        updateNameBtn.textContent = "Update Name";
+        updateNameBtn.classList.add("dm4-editor-button");
+        nameLine.appendChild(updateNameBtn);
+
+        updateNameBtn.addEventListener("click", function () {
+          var newName = nameInput.value.trim();
+          if (!newName || newName === name) return;
+          var datasetId = getCurrentDatasetId();
+          var job = {
+            target_dataset: datasetId,
+            op_type: "update_system",
+            payload: {
+              system_id: selId,
+              changes: {
+                labels: { display: newName }
+              }
+            },
+            created_at: new Date().toISOString()
+          };
+          if (state.actions && typeof state.actions.addEditorJob === "function") {
+            state.actions.addEditorJob(job);
+          }
+        });
+
+        // Coordinates display
+        var coordsLine = document.createElement("div");
+        coordsLine.classList.add("dm4-editor-line", "dm-text-body");
+        coordsLine.textContent = "Coords: (" + coords[0] + ", " + coords[1] + ") ";
+        container.appendChild(coordsLine);
+
+        var moveBtn = document.createElement("button");
+        moveBtn.type = "button";
+        moveBtn.textContent = "Move on Map";
+        moveBtn.classList.add("dm4-editor-button");
+        coordsLine.appendChild(moveBtn);
+
+        moveBtn.addEventListener("click", function () {
+          if (state.actions && typeof state.actions.setEditorMode === "function") {
+            state.actions.setEditorMode("move_system", { system_id: selId });
+          }
+        });
+
+        // Grid display
+        var gridLine = document.createElement("div");
+        gridLine.classList.add("dm4-editor-line", "dm-text-body");
+        gridLine.textContent = "Grid: " + grid;
+        container.appendChild(gridLine);
+
+        // Find latest pending sector change for selected system, if any
+        var pendingSector = null;
         for (var i = jobs.length - 1; i >= 0; i--) {
           var j = jobs[i];
           if (
@@ -993,44 +1170,19 @@ function EditorPanel(core) {
             j.payload &&
             j.payload.system_id === selId
           ) {
-            pendingSector =
-              j.payload.new_sector_id || j.payload.newSector || null;
+            pendingSector = j.payload.new_sector_id || j.payload.newSector || null;
             break;
           }
         }
-      }
 
-      // SYSTEM SECTION
-      sysContent.innerHTML = "";
-
-      if (!selId || !systems[selId]) {
-        var noSel = document.createElement("div");
-        noSel.classList.add("dm4-editor-line", "dm-text-body");
-        noSel.textContent = "No system selected. Click a system marker to begin.";
-        sysContent.appendChild(noSel);
-      } else {
-        var sys = systems[selId];
-        var name = sys.name || selId;
-        var sector = sys.sector || "Unknown Sector";
-        var grid = (sys.grid && sys.grid.grid) || "UNSPECIFIED";
-
-        var headerLine = document.createElement("div");
-        headerLine.classList.add("dm4-editor-line", "dm-text-body");
-        headerLine.textContent = "System: " + name + " (" + selId + ")";
-        sysContent.appendChild(headerLine);
-
-        var gridLine = document.createElement("div");
-        gridLine.classList.add("dm4-editor-line", "dm-text-body");
-        gridLine.textContent = "Grid: " + grid;
-        sysContent.appendChild(gridLine);
-
+        // Sector dropdown
         var sectorLine = document.createElement("div");
         sectorLine.classList.add("dm4-editor-line", "dm-text-body");
         sectorLine.textContent = "Sector: ";
-        sysContent.appendChild(sectorLine);
+        container.appendChild(sectorLine);
 
         var sectorSelect = document.createElement("select");
-        sectorSelect.classList.add("dm4-editor-select");
+        sectorSelect.classList.add("dm4-editor-select", "dm4-editor-input");
         // Current sector first so it is always available even if not in sectorList
         var seen = {};
         function addOption(label) {
@@ -1048,24 +1200,13 @@ function EditorPanel(core) {
         sectorSelect.value = sector;
         sectorLine.appendChild(sectorSelect);
 
-        if (pendingSector && pendingSector !== sector) {
-          var pendingLine = document.createElement("div");
-          pendingLine.classList.add("dm4-editor-line", "dm-text-body");
-          pendingLine.textContent = "Pending sector: " + pendingSector;
-          sysContent.appendChild(pendingLine);
-        }
+        var changeSectorBtn = document.createElement("button");
+        changeSectorBtn.type = "button";
+        changeSectorBtn.textContent = "Change Sector";
+        changeSectorBtn.classList.add("dm4-editor-button");
+        sectorLine.appendChild(changeSectorBtn);
 
-        var controlsLine = document.createElement("div");
-        controlsLine.classList.add("dm4-editor-line", "dm-text-body");
-        sysContent.appendChild(controlsLine);
-
-        var applyBtn = document.createElement("button");
-        applyBtn.type = "button";
-        applyBtn.textContent = "Reassign Sector";
-        applyBtn.classList.add("dm4-editor-button");
-        controlsLine.appendChild(applyBtn);
-
-        applyBtn.addEventListener("click", function () {
+        changeSectorBtn.addEventListener("click", function () {
           var newSector = sectorSelect.value || "";
           if (!newSector || newSector === sector) {
             return;
@@ -1081,47 +1222,351 @@ function EditorPanel(core) {
             },
             created_at: new Date().toISOString()
           };
-          if (
-            state &&
-            state.actions &&
-            typeof state.actions.addEditorJob === "function"
-          ) {
+          if (state.actions && typeof state.actions.addEditorJob === "function") {
             state.actions.addEditorJob(job);
+          }
+        });
+
+        if (pendingSector && pendingSector !== sector) {
+          var pendingLine = document.createElement("div");
+          pendingLine.classList.add("dm4-editor-line", "dm-text-body");
+          pendingLine.textContent = "Pending sector: " + pendingSector;
+          container.appendChild(pendingLine);
+        }
+
+        // Editor notes
+        var notesLine = document.createElement("div");
+        notesLine.classList.add("dm4-editor-line", "dm-text-body");
+        notesLine.textContent = "Editor Notes:";
+        container.appendChild(notesLine);
+
+        var notesTextarea = document.createElement("textarea");
+        notesTextarea.classList.add("dm4-editor-input", "dm4-editor-textarea");
+        notesTextarea.value = editorNotes;
+        container.appendChild(notesTextarea);
+
+        var saveNotesBtn = document.createElement("button");
+        saveNotesBtn.type = "button";
+        saveNotesBtn.textContent = "Save Notes";
+        saveNotesBtn.classList.add("dm4-editor-button");
+        container.appendChild(saveNotesBtn);
+
+        saveNotesBtn.addEventListener("click", function () {
+          var newNotes = notesTextarea.value;
+          var datasetId = getCurrentDatasetId();
+          var job = {
+            target_dataset: datasetId,
+            op_type: "update_system",
+            payload: {
+              system_id: selId,
+              changes: {
+                editor_notes: newNotes
+              }
+            },
+            created_at: new Date().toISOString()
+          };
+          if (state.actions && typeof state.actions.addEditorJob === "function") {
+            state.actions.addEditorJob(job);
+          }
+        });
+
+        // Delete system button
+        var deleteLine = document.createElement("div");
+        deleteLine.classList.add("dm4-editor-line", "dm-text-body");
+        deleteLine.style.marginTop = "0.5rem";
+        container.appendChild(deleteLine);
+
+        var deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.textContent = "Delete System";
+        deleteBtn.classList.add("dm4-editor-button", "dm4-editor-delete-btn");
+        deleteLine.appendChild(deleteBtn);
+
+        deleteBtn.addEventListener("click", function () {
+          if (!confirm("Delete system '" + name + "'? This will remove all route connections.")) {
+            return;
+          }
+          var datasetId = getCurrentDatasetId();
+          var job = {
+            target_dataset: datasetId,
+            op_type: "delete_system",
+            payload: {
+              system_id: selId
+            },
+            created_at: new Date().toISOString()
+          };
+          if (state.actions && typeof state.actions.addEditorJob === "function") {
+            state.actions.addEditorJob(job);
+          }
+          // Clear selection
+          if (state.actions && typeof state.actions.selectSystem === "function") {
+            state.actions.selectSystem(null);
+          }
+        });
+      }
+    }
+
+    // Render ROUTES tab
+    function renderRoutesTab(container, st, systems, hyperlanes, jobs) {
+      var line = document.createElement("div");
+      line.classList.add("dm4-editor-line", "dm-text-body");
+      line.textContent = "Routes management - Coming soon";
+      container.appendChild(line);
+    }
+
+    // Render SECTORS tab
+    function renderSectorsTab(container, st, systems, sectorList, jobs) {
+      // Build sector system counts
+      var sectorCounts = {};
+      Object.keys(systems).forEach(function (sysId) {
+        var sys = systems[sysId];
+        var sec = sys.sector || "Unknown Sector";
+        sectorCounts[sec] = (sectorCounts[sec] || 0) + 1;
+      });
+
+      var headerLine = document.createElement("div");
+      headerLine.classList.add("dm4-editor-line", "dm-text-body");
+      headerLine.textContent = "Sectors (" + sectorList.length + "):";
+      container.appendChild(headerLine);
+
+      // List sectors
+      sectorList.forEach(function (secName) {
+        var secLine = document.createElement("div");
+        secLine.classList.add("dm4-editor-line", "dm-text-body");
+        secLine.textContent = secName + " (" + (sectorCounts[secName] || 0) + " systems)";
+        container.appendChild(secLine);
+      });
+
+      // Create new sector
+      var createLine = document.createElement("div");
+      createLine.classList.add("dm4-editor-line", "dm-text-body");
+      createLine.style.marginTop = "0.5rem";
+      container.appendChild(createLine);
+
+      var newSectorInput = document.createElement("input");
+      newSectorInput.type = "text";
+      newSectorInput.classList.add("dm4-editor-input");
+      newSectorInput.placeholder = "New sector name";
+      newSectorInput.style.width = "120px";
+      createLine.appendChild(newSectorInput);
+
+      var createBtn = document.createElement("button");
+      createBtn.type = "button";
+      createBtn.textContent = "Create Sector";
+      createBtn.classList.add("dm4-editor-button");
+      createLine.appendChild(createBtn);
+
+      createBtn.addEventListener("click", function () {
+        var newName = newSectorInput.value.trim();
+        if (!newName) return;
+        if (sectorList.indexOf(newName) >= 0) {
+          alert("Sector '" + newName + "' already exists.");
+          return;
+        }
+        var datasetId = getCurrentDatasetId();
+        var job = {
+          target_dataset: datasetId,
+          op_type: "create_sector",
+          payload: {
+            sector_name: newName
+          },
+          created_at: new Date().toISOString()
+        };
+        if (state.actions && typeof state.actions.addEditorJob === "function") {
+          state.actions.addEditorJob(job);
+        }
+        newSectorInput.value = "";
+      });
+    }
+
+    // Render META tab
+    function renderMetaTab(container, st, dataset, systems, hyperlanes) {
+      var metadata = dataset.dataset_metadata || {};
+
+      var nameLine = document.createElement("div");
+      nameLine.classList.add("dm4-editor-line", "dm-text-body");
+      nameLine.textContent = "Dataset Name: ";
+      container.appendChild(nameLine);
+
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.classList.add("dm4-editor-input");
+      nameInput.value = metadata.name || "";
+      nameInput.style.width = "150px";
+      nameLine.appendChild(nameInput);
+
+      var saveNameBtn = document.createElement("button");
+      saveNameBtn.type = "button";
+      saveNameBtn.textContent = "Save";
+      saveNameBtn.classList.add("dm4-editor-button");
+      nameLine.appendChild(saveNameBtn);
+
+      saveNameBtn.addEventListener("click", function () {
+        var newName = nameInput.value.trim();
+        var datasetId = getCurrentDatasetId();
+        var job = {
+          target_dataset: datasetId,
+          op_type: "update_dataset_metadata",
+          payload: {
+            changes: {
+              name: newName
+            }
+          },
+          created_at: new Date().toISOString()
+        };
+        if (state.actions && typeof state.actions.addEditorJob === "function") {
+          state.actions.addEditorJob(job);
+        }
+      });
+
+      // Version
+      var versionLine = document.createElement("div");
+      versionLine.classList.add("dm4-editor-line", "dm-text-body");
+      versionLine.textContent = "Version: ";
+      container.appendChild(versionLine);
+
+      var versionInput = document.createElement("input");
+      versionInput.type = "text";
+      versionInput.classList.add("dm4-editor-input");
+      versionInput.value = metadata.version || "";
+      versionInput.style.width = "80px";
+      versionLine.appendChild(versionInput);
+
+      var saveVersionBtn = document.createElement("button");
+      saveVersionBtn.type = "button";
+      saveVersionBtn.textContent = "Save";
+      saveVersionBtn.classList.add("dm4-editor-button");
+      versionLine.appendChild(saveVersionBtn);
+
+      saveVersionBtn.addEventListener("click", function () {
+        var newVersion = versionInput.value.trim();
+        var datasetId = getCurrentDatasetId();
+        var job = {
+          target_dataset: datasetId,
+          op_type: "update_dataset_metadata",
+          payload: {
+            changes: {
+              version: newVersion
+            }
+          },
+          created_at: new Date().toISOString()
+        };
+        if (state.actions && typeof state.actions.addEditorJob === "function") {
+          state.actions.addEditorJob(job);
+        }
+      });
+
+      // Description
+      var descLine = document.createElement("div");
+      descLine.classList.add("dm4-editor-line", "dm-text-body");
+      descLine.textContent = "Description:";
+      container.appendChild(descLine);
+
+      var descTextarea = document.createElement("textarea");
+      descTextarea.classList.add("dm4-editor-input", "dm4-editor-textarea");
+      descTextarea.value = metadata.description || "";
+      container.appendChild(descTextarea);
+
+      var saveDescBtn = document.createElement("button");
+      saveDescBtn.type = "button";
+      saveDescBtn.textContent = "Save";
+      saveDescBtn.classList.add("dm4-editor-button");
+      container.appendChild(saveDescBtn);
+
+      saveDescBtn.addEventListener("click", function () {
+        var newDesc = descTextarea.value;
+        var datasetId = getCurrentDatasetId();
+        var job = {
+          target_dataset: datasetId,
+          op_type: "update_dataset_metadata",
+          payload: {
+            changes: {
+              description: newDesc
+            }
+          },
+          created_at: new Date().toISOString()
+        };
+        if (state.actions && typeof state.actions.addEditorJob === "function") {
+          state.actions.addEditorJob(job);
+        }
+      });
+
+      // Statistics
+      var statsLine = document.createElement("div");
+      statsLine.classList.add("dm4-editor-line", "dm-text-body");
+      statsLine.style.marginTop = "0.5rem";
+      statsLine.textContent = "Statistics:";
+      container.appendChild(statsLine);
+
+      var systemCount = Object.keys(systems).length;
+      var sectorSet = {};
+      Object.keys(systems).forEach(function (sysId) {
+        var sec = systems[sysId].sector;
+        if (sec) sectorSet[sec] = true;
+      });
+      var sectorCount = Object.keys(sectorSet).length;
+
+      var namedRouteCount = 0;
+      var minorRouteCount = 0;
+      if (hyperlanes) {
+        Object.keys(hyperlanes).forEach(function (key) {
+          if (key === "minor_routes") {
+            minorRouteCount = (hyperlanes[key] || []).length;
           } else {
-            DM4.Logger.warn(
-              "[EDITOR] addEditorJob action not available; job not recorded."
-            );
+            namedRouteCount++;
           }
         });
       }
 
-      // JOBS SECTION
-      jobsContent.innerHTML = "";
+      var stat1 = document.createElement("div");
+      stat1.classList.add("dm4-editor-line", "dm-text-body");
+      stat1.textContent = "  Total systems: " + systemCount;
+      container.appendChild(stat1);
+
+      var stat2 = document.createElement("div");
+      stat2.classList.add("dm4-editor-line", "dm-text-body");
+      stat2.textContent = "  Total sectors: " + sectorCount;
+      container.appendChild(stat2);
+
+      var stat3 = document.createElement("div");
+      stat3.classList.add("dm4-editor-line", "dm-text-body");
+      stat3.textContent = "  Named routes: " + namedRouteCount;
+      container.appendChild(stat3);
+
+      var stat4 = document.createElement("div");
+      stat4.classList.add("dm4-editor-line", "dm-text-body");
+      stat4.textContent = "  Minor route connections: " + minorRouteCount;
+      container.appendChild(stat4);
+    }
+
+    // Render jobs section
+    function renderJobsSection(container, jobs) {
+      container.innerHTML = "";
 
       if (!jobs.length) {
         var none = document.createElement("div");
         none.classList.add("dm4-editor-line", "dm-text-body");
         none.textContent = "No pending edits recorded.";
-        jobsContent.appendChild(none);
+        container.appendChild(none);
       } else {
         var maxShow = 8;
         for (var k = 0; k < jobs.length && k < maxShow; k++) {
           var jobLine = document.createElement("div");
           jobLine.classList.add("dm4-editor-line", "dm-text-body");
           jobLine.textContent = describeJob(jobs[k]);
-          jobsContent.appendChild(jobLine);
+          container.appendChild(jobLine);
         }
         if (jobs.length > maxShow) {
           var moreLine = document.createElement("div");
           moreLine.classList.add("dm4-editor-line", "dm-text-small");
           moreLine.textContent =
             "+ " + (jobs.length - maxShow) + " more edit(s) not shown.";
-          jobsContent.appendChild(moreLine);
+          container.appendChild(moreLine);
         }
 
         var controls = document.createElement("div");
         controls.classList.add("dm4-editor-line", "dm-text-body");
-        jobsContent.appendChild(controls);
+        container.appendChild(controls);
 
         var exportBtn = document.createElement("button");
         exportBtn.type = "button";
@@ -1139,7 +1584,6 @@ function EditorPanel(core) {
         clearBtn.classList.add("dm4-editor-button");
         controls.appendChild(clearBtn);
 
-        
         clearBtn.addEventListener("click", function () {
           if (
             state &&
@@ -1242,7 +1686,6 @@ function EditorPanel(core) {
             }
           }
         });
-
       }
     }
 

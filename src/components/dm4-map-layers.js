@@ -78,6 +78,7 @@
 
     const markerById = new Map();
     let unsubscribe = null;
+    let lastDataset = null;
 
     // DM4_HELPER_FUNCTION: buildMarkers
 
@@ -196,11 +197,17 @@
     }
 
     buildMarkers(core.state.getState().dataset);
+    lastDataset = core.state.getState().dataset;
 
-    // Use scoped subscription - only listen to selection changes
+    // Use scoped subscription - listen to selection and dataset changes
     unsubscribe = state.subscribe(function (st) {
+      // Check if dataset changed
+      if (st.dataset !== lastDataset) {
+        lastDataset = st.dataset;
+        buildMarkers(st.dataset);
+      }
       renderSelection(st);
-    }, ['selection']);
+    }, ['selection', 'dataset']);
 
     return {
       element: container,
@@ -219,6 +226,7 @@ function createSystemLabelsLayer(core) {
 
   const labelById = new Map();
   let unsubscribe = null;
+  let lastDataset = null;
 
   // DM4_HELPER_FUNCTION: buildLabels
 
@@ -285,10 +293,17 @@ function createSystemLabelsLayer(core) {
   }
 
   buildLabels(state.getState().dataset);
-  // Use scoped subscription - only listen to selection changes
+  lastDataset = state.getState().dataset;
+  
+  // Use scoped subscription - listen to selection and dataset changes
   unsubscribe = state.subscribe(function (st) {
+    // Check if dataset changed
+    if (st.dataset !== lastDataset) {
+      lastDataset = st.dataset;
+      buildLabels(st.dataset);
+    }
     renderSelection(st);
-  }, ['selection']);
+  }, ['selection', 'dataset']);
 
   return {
     element: container,
@@ -402,13 +417,14 @@ function createRouteLayer(core) {
   const height = config.mapHeight || 6000;
 
   const state = core.state;
-  const dataset = state.getState().dataset || {};
-  const hyperlanes = dataset.hyperlanes || {};
-  const routeMeta = dataset.route_metadata || {};
-  const systems = dataset.systems || {};
-  const endpoints = dataset.endpoint_pixels || {};
-
-  const endpointMeta = dataset.endpoint_metadata || {};
+  let lastDataset = null;
+  
+  var dataset = state.getState().dataset || {};
+  var hyperlanes = dataset.hyperlanes || {};
+  var routeMeta = dataset.route_metadata || {};
+  var systems = dataset.systems || {};
+  var endpoints = dataset.endpoint_pixels || {};
+  var endpointMeta = dataset.endpoint_metadata || {};
 
   // DM4_HELPER_FUNCTION: buildRouteNodes
   function buildRouteNodes(segs) {
@@ -617,6 +633,15 @@ function createRouteLayer(core) {
   const allLines = [];
   const linesBySystem = new Map();
 
+  // Route hover detection and labeling variables
+  var routeHoverData = [];
+  var currentHoveredRoute = null;
+  var HOVER_PROXIMITY_THRESHOLD = 50;
+  var HOVER_DWELL_TIME = 350; // ms before hover activates
+  var hoverDelayTimer = null;
+  var pendingHoverRoute = null;
+  var routeHoverTooltip = null; // Fixed tooltip element
+
   // DM4_HELPER_FUNCTION: registerLine
 
   function registerLine(line, from, to) {
@@ -634,161 +659,172 @@ function createRouteLayer(core) {
   var MEDIUM_ROUTE_CURVATURE = 0.32;
   var CURVE_SAMPLES_PER_SEGMENT = 12;
 
-  // Render major and medium routes as curved polylines
-  Object.keys(hyperlanes).forEach(function (routeName) {
-    if (routeName === "minor_routes") return;
+  // DM4_HELPER_FUNCTION: buildRoutes
+  // Builds all routes (major, medium, minor) and edge markers from current dataset
+  function buildRoutes(dataset) {
+    // Update dataset-derived variables
+    hyperlanes = dataset.hyperlanes || {};
+    routeMeta = dataset.route_metadata || {};
+    systems = dataset.systems || {};
+    endpoints = dataset.endpoint_pixels || {};
+    endpointMeta = dataset.endpoint_metadata || {};
     
-    var segments = hyperlanes[routeName] || [];
-    var meta = routeMeta[routeName] || {};
-    var routeClass = meta.route_class || "medium";
-    var cls = routeClass === "major" ? "route-major" : "route-medium";
-    
-    if (!segments.length) return;
-    
-    // Build ordered path through route nodes
-    var routeNodes = buildRouteNodes(segments);
-    if (!routeNodes.length) return;
-    
-    // Get coordinates for each node
-    var pts = [];
-    for (var i = 0; i < routeNodes.length; i++) {
-      var coords = getPointCoords(routeNodes[i]);
-      if (coords && Array.isArray(coords) && coords.length >= 2) {
-        pts.push(coords);
+    // Clear existing routes and hover data
+    svg.innerHTML = "";
+    allLines.length = 0;
+    linesBySystem.clear();
+    routeHoverData = [];
+
+    // Render major and medium routes as curved polylines
+    Object.keys(hyperlanes).forEach(function (routeName) {
+      if (routeName === "minor_routes") return;
+      
+      var segments = hyperlanes[routeName] || [];
+      var meta = routeMeta[routeName] || {};
+      var routeClass = meta.route_class || "medium";
+      var cls = routeClass === "major" ? "route-major" : "route-medium";
+      
+      if (!segments.length) return;
+      
+      // Build ordered path through route nodes
+      var routeNodes = buildRouteNodes(segments);
+      if (!routeNodes.length) return;
+      
+      // Get coordinates for each node
+      var pts = [];
+      for (var i = 0; i < routeNodes.length; i++) {
+        var coords = getPointCoords(routeNodes[i]);
+        if (coords && Array.isArray(coords) && coords.length >= 2) {
+          pts.push(coords);
+        }
       }
-    }
-    
-    if (pts.length < 2) return;
-    
-    // Generate curved path
-    var curvature = routeClass === "major" ? MAJOR_ROUTE_CURVATURE : MEDIUM_ROUTE_CURVATURE;
-    var curvePoints = buildCurvedPolyline(pts, curvature, CURVE_SAMPLES_PER_SEGMENT);
-    
-    if (curvePoints.length < 2) return;
-    
-    // Render as SVG polyline
-    var polyline = document.createElementNS(svgNS, "polyline");
-    var pointsAttr = curvePoints.map(function(p) {
-      return p[0] + "," + p[1];
-    }).join(" ");
-    
-    polyline.setAttribute("points", pointsAttr);
-    polyline.setAttribute("class", cls);
-    polyline.setAttribute("data-route-name", routeName);
-    polyline.setAttribute("fill", "none");
-    
-    var fromSystem = routeNodes[0];
-    var toSystem = routeNodes[routeNodes.length - 1];
-    svg.appendChild(polyline);
-    registerLine(polyline, fromSystem, toSystem);
-  });
-
-  // Minor routes stay as straight lines
-  const minorList = hyperlanes.minor_routes || [];
-  minorList.forEach(function (pair) {
-    if (!Array.isArray(pair) || pair.length < 2) return;
-    const from = pair[0];
-    const to = pair[1];
-
-    const fromCoords = getPointCoords(from);
-    const toCoords = getPointCoords(to);
-    if (!fromCoords || !toCoords) return;
-
-    const line = document.createElementNS(svgNS, "line");
-    line.setAttribute("x1", fromCoords[0]);
-    line.setAttribute("y1", fromCoords[1]);
-    line.setAttribute("x2", toCoords[0]);
-    line.setAttribute("y2", toCoords[1]);
-
-    line.setAttribute("class", "route-minor");
-    line.setAttribute("data-route-name", "minor_routes");
-    line.setAttribute("data-from", from);
-    line.setAttribute("data-to", to);
-
-    svg.appendChild(line);
-    registerLine(line, from, to);
-  });
-
-
-  const edgeMarkers = buildRouteEdgeMarkers();
-  if (edgeMarkers && edgeMarkers.length) {
-    const edgesGroup = document.createElementNS(svgNS, "g");
-    edgesGroup.setAttribute("class", "dm4-routes-edges");
-
-    edgeMarkers.forEach(function (m) {
-      const size = 14;
-      const x = m.x;
-      const y = m.y;
-
-      const arrow = document.createElementNS(svgNS, "path");
-      arrow.setAttribute("class", "dm4-route-endpoint-arrow route-" + m.routeClass);
-      arrow.setAttribute(
-        "d",
-        "M " + (x - size / 2) + " " + (y + size / 2) +
-          " L " + (x + size / 2) + " " + (y + size / 2) +
-          " L " + x + " " + (y - size / 2) + " Z"
-      );
-
-      var angle = m.angle || 0;
-
-      arrow.setAttribute("transform", "rotate(" + angle + " " + x + " " + y + ")");
-
-      edgesGroup.appendChild(arrow);
+      
+      if (pts.length < 2) return;
+      
+      // Generate curved path
+      var curvature = routeClass === "major" ? MAJOR_ROUTE_CURVATURE : MEDIUM_ROUTE_CURVATURE;
+      var curvePoints = buildCurvedPolyline(pts, curvature, CURVE_SAMPLES_PER_SEGMENT);
+      
+      if (curvePoints.length < 2) return;
+      
+      // Render as SVG polyline
+      var polyline = document.createElementNS(svgNS, "polyline");
+      var pointsAttr = curvePoints.map(function(p) {
+        return p[0] + "," + p[1];
+      }).join(" ");
+      
+      polyline.setAttribute("points", pointsAttr);
+      polyline.setAttribute("class", cls);
+      polyline.setAttribute("data-route-name", routeName);
+      polyline.setAttribute("fill", "none");
+      
+      var fromSystem = routeNodes[0];
+      var toSystem = routeNodes[routeNodes.length - 1];
+      svg.appendChild(polyline);
+      registerLine(polyline, fromSystem, toSystem);
     });
 
-    svg.appendChild(edgesGroup);
+    // Minor routes stay as straight lines
+    var minorList = hyperlanes.minor_routes || [];
+    minorList.forEach(function (pair) {
+      if (!Array.isArray(pair) || pair.length < 2) return;
+      var from = pair[0];
+      var to = pair[1];
+
+      var fromCoords = getPointCoords(from);
+      var toCoords = getPointCoords(to);
+      if (!fromCoords || !toCoords) return;
+
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", fromCoords[0]);
+      line.setAttribute("y1", fromCoords[1]);
+      line.setAttribute("x2", toCoords[0]);
+      line.setAttribute("y2", toCoords[1]);
+
+      line.setAttribute("class", "route-minor");
+      line.setAttribute("data-route-name", "minor_routes");
+      line.setAttribute("data-from", from);
+      line.setAttribute("data-to", to);
+
+      svg.appendChild(line);
+      registerLine(line, from, to);
+    });
+
+    // Build and render edge markers
+    var edgeMarkers = buildRouteEdgeMarkers();
+    if (edgeMarkers && edgeMarkers.length) {
+      var edgesGroup = document.createElementNS(svgNS, "g");
+      edgesGroup.setAttribute("class", "dm4-routes-edges");
+
+      edgeMarkers.forEach(function (m) {
+        var size = 14;
+        var x = m.x;
+        var y = m.y;
+
+        var arrow = document.createElementNS(svgNS, "path");
+        arrow.setAttribute("class", "dm4-route-endpoint-arrow route-" + m.routeClass);
+        arrow.setAttribute(
+          "d",
+          "M " + (x - size / 2) + " " + (y + size / 2) +
+            " L " + (x + size / 2) + " " + (y + size / 2) +
+            " L " + x + " " + (y - size / 2) + " Z"
+        );
+
+        var angle = m.angle || 0;
+
+        arrow.setAttribute("transform", "rotate(" + angle + " " + x + " " + y + ")");
+
+        edgesGroup.appendChild(arrow);
+      });
+
+      svg.appendChild(edgesGroup);
+    }
+
+    // Build route hover data structure (major and medium routes only)
+    Object.keys(hyperlanes).forEach(function (routeName) {
+      if (routeName === "minor_routes") return;
+      
+      var segments = hyperlanes[routeName] || [];
+      var meta = routeMeta[routeName] || {};
+      var routeClass = meta.route_class || "medium";
+      
+      if (!segments.length) return;
+      
+      var routeNodes = buildRouteNodes(segments);
+      if (!routeNodes.length) return;
+      
+      var pts = [];
+      for (var i = 0; i < routeNodes.length; i++) {
+        var coords = getPointCoords(routeNodes[i]);
+        if (coords && Array.isArray(coords) && coords.length >= 2) {
+          pts.push(coords);
+        }
+      }
+      
+      if (pts.length < 2) return;
+      
+      var curvature = routeClass === "major" ? MAJOR_ROUTE_CURVATURE : MEDIUM_ROUTE_CURVATURE;
+      var curvePoints = buildCurvedPolyline(pts, curvature, CURVE_SAMPLES_PER_SEGMENT);
+      
+      if (curvePoints.length < 2) return;
+      
+      // Find the polyline element for this route by querying the SVG directly
+      var polylineElement = svg.querySelector('polyline[data-route-name="' + routeName + '"]');
+      
+      if (polylineElement) {
+        routeHoverData.push({
+          name: routeName,
+          curvePoints: curvePoints,
+          polyline: polylineElement
+        });
+      }
+    });
   }
 
-  // DM4_HELPER_FUNCTION: Route hover detection and labeling
-  var routeHoverData = [];
-  var currentHoveredRoute = null;
-  var HOVER_PROXIMITY_THRESHOLD = 50;
-  var HOVER_DWELL_TIME = 350; // ms before hover activates
-  var hoverDelayTimer = null;
-  var pendingHoverRoute = null;
-  var routeHoverTooltip = null; // Fixed tooltip element
+  // Initial build
+  buildRoutes(dataset);
 
-  // Build route hover data structure (major and medium routes only)
-  Object.keys(hyperlanes).forEach(function (routeName) {
-    if (routeName === "minor_routes") return;
-    
-    var segments = hyperlanes[routeName] || [];
-    var meta = routeMeta[routeName] || {};
-    var routeClass = meta.route_class || "medium";
-    
-    if (!segments.length) return;
-    
-    var routeNodes = buildRouteNodes(segments);
-    if (!routeNodes.length) return;
-    
-    var pts = [];
-    for (var i = 0; i < routeNodes.length; i++) {
-      var coords = getPointCoords(routeNodes[i]);
-      if (coords && Array.isArray(coords) && coords.length >= 2) {
-        pts.push(coords);
-      }
-    }
-    
-    if (pts.length < 2) return;
-    
-    var curvature = routeClass === "major" ? MAJOR_ROUTE_CURVATURE : MEDIUM_ROUTE_CURVATURE;
-    var curvePoints = buildCurvedPolyline(pts, curvature, CURVE_SAMPLES_PER_SEGMENT);
-    
-    if (curvePoints.length < 2) return;
-    
-    // Find the polyline element for this route by querying the SVG directly
-    var polylineElement = svg.querySelector('polyline[data-route-name="' + routeName + '"]');
-    
-    if (polylineElement) {
-      routeHoverData.push({
-        name: routeName,
-        curvePoints: curvePoints,
-        polyline: polylineElement
-      });
-    }
-  });
-
-  // DM4_HELPER_FUNCTION: Calculate distance from point to line segment
+  // DM4_HELPER_FUNCTION: Route hover detection helper functions
   function distanceToSegment(px, py, x1, y1, x2, y2) {
     var dx = x2 - x1;
     var dy = y2 - y1;
@@ -1020,10 +1056,17 @@ function createRouteLayer(core) {
     lastSelectedRouteId = selected;
   }
 
-  // Use scoped subscription - only listen to selection changes
+  // Use scoped subscription - listen to selection and dataset changes
   const unsubscribe = state.subscribe(function (st) {
+    // Check if dataset changed
+    if (st.dataset !== lastDataset) {
+      lastDataset = st.dataset;
+      buildRoutes(st.dataset);
+      // Re-attach hover listener after rebuild
+      attachHoverListener();
+    }
     renderSelection(st);
-  }, ['selection']);
+  }, ['selection', 'dataset']);
 
   // Initial render
   renderSelection(state.getState());

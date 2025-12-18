@@ -829,6 +829,18 @@
       }
     }
 
+    // Helper: derive current dataset id (for job tagging)
+    function getCurrentDatasetId() {
+      try {
+        if (typeof window !== "undefined" && window.DM4_CURRENT_DATASET_ID) {
+          return window.DM4_CURRENT_DATASET_ID;
+        }
+      } catch (e) {
+        // ignore, fall through to default
+      }
+      return "main";
+    }
+
 function EditorPanel(core) {
     const state = core.state;
 
@@ -869,18 +881,6 @@ function EditorPanel(core) {
     const jobsContent = document.createElement("div");
     jobsContent.classList.add("dm4-editor-section");
     inner.appendChild(jobsContent);
-
-    // Small helper: derive current dataset id (for job tagging)
-    function getCurrentDatasetId() {
-      try {
-        if (typeof window !== "undefined" && window.DM4_CURRENT_DATASET_ID) {
-          return window.DM4_CURRENT_DATASET_ID;
-        }
-      } catch (e) {
-        // ignore, fall through to default
-      }
-      return "main";
-    }
 
     // Small helper: summarise jobs for display
     function describeJob(job) {
@@ -957,186 +957,6 @@ function EditorPanel(core) {
       }
       
       return "[" + target + "] " + t;
-    }
-
-    
-    // DB5 patch processor (in-viewer, strict)
-    function dm4ValidateDb5Structure(db5) {
-      if (!db5 || typeof db5 !== "object" || !db5.systems || typeof db5.systems !== "object") {
-        throw new Error("DB5 file does not contain a 'systems' object at the top level.");
-      }
-    }
-
-    function dm4ApplyChangeSector(db5, job, strict) {
-      if (strict === undefined) strict = true;
-      var payload = job.payload || {};
-      var systemId = payload.system_id;
-      var oldSector = payload.old_sector_id;
-      var newSector = payload.new_sector_id;
-
-      if (!systemId) {
-        var msg = "change_sector job missing system_id";
-        if (strict) throw new Error(msg);
-        return { applied: false, message: msg };
-      }
-
-      var systems = db5.systems || {};
-      if (!systems[systemId]) {
-        var notFoundMsg = "System '" + systemId + "' not found in DB5; cannot change sector.";
-        if (strict) throw new Error(notFoundMsg);
-        return { applied: false, message: notFoundMsg };
-      }
-
-      var sysEntry = systems[systemId];
-      var currentSector = sysEntry.sector;
-
-      if (oldSector != null && currentSector !== oldSector) {
-        var mismatchMsg =
-          "Sector mismatch for '" +
-          systemId +
-          "': job expects '" +
-          oldSector +
-          "', DB5 has '" +
-          currentSector +
-          "'. No change applied.";
-        if (strict) throw new Error(mismatchMsg);
-        return { applied: false, message: mismatchMsg };
-      }
-
-      sysEntry.sector = newSector;
-
-      return {
-        applied: true,
-        message:
-          "System '" + systemId + "': sector '" + currentSector + "' -> '" + newSector + "'"
-      };
-    }
-
-    function dm4ApplyEditorJobToDb5(db5, job, strict) {
-      var opType = job.op_type || job.type;
-      if (opType === "change_sector") {
-        return dm4ApplyChangeSector(db5, job, strict);
-      }
-      if (opType === "add_system") {
-        return dm4ApplyAddSystem(db5, job, strict);
-      }
-      if (opType === "delete_system") {
-        return dm4ApplyDeleteSystem(db5, job, strict);
-      }
-      if (opType === "update_system") {
-        return dm4ApplyUpdateSystem(db5, job, strict);
-      }
-      if (opType === "move_system") {
-        return dm4ApplyMoveSystem(db5, job, strict);
-      }
-      if (opType === "add_hyperlane_segment") {
-        return dm4ApplyAddHyperlaneSegment(db5, job, strict);
-      }
-      if (opType === "remove_hyperlane_segment") {
-        return dm4ApplyRemoveHyperlaneSegment(db5, job, strict);
-      }
-      if (opType === "create_route") {
-        return dm4ApplyCreateRoute(db5, job, strict);
-      }
-      if (opType === "delete_route") {
-        return dm4ApplyDeleteRoute(db5, job, strict);
-      }
-      if (opType === "update_route_metadata") {
-        return dm4ApplyUpdateRouteMetadata(db5, job, strict);
-      }
-      if (opType === "add_minor_route") {
-        return dm4ApplyAddMinorRoute(db5, job, strict);
-      }
-      if (opType === "remove_minor_route") {
-        return dm4ApplyRemoveMinorRoute(db5, job, strict);
-      }
-      if (opType === "create_sector") {
-        return dm4ApplyCreateSector(db5, job, strict);
-      }
-      if (opType === "delete_sector") {
-        return dm4ApplyDeleteSector(db5, job, strict);
-      }
-      if (opType === "rename_sector") {
-        return dm4ApplyRenameSector(db5, job, strict);
-      }
-      if (opType === "update_dataset_metadata") {
-        return dm4ApplyUpdateDatasetMetadata(db5, job, strict);
-      }
-      var msg = "Unsupported op_type '" + opType + "'. Job skipped.";
-      if (strict) throw new Error(msg);
-      return { applied: false, message: msg };
-    }
-
-    function dm4FilterJobsForDataset(jobs, datasetId) {
-      var targetId = datasetId || getCurrentDatasetId() || "main";
-      return (jobs || []).filter(function (job) {
-        var target = job.target_dataset || job.dataset || targetId;
-        return target === targetId;
-      });
-    }
-
-    function dm4ApplyJobsToDb5(db5, jobs, datasetId, strict) {
-      if (strict === undefined) strict = true;
-      dm4ValidateDb5Structure(db5);
-      var allJobs = jobs || [];
-      var applicable = dm4FilterJobsForDataset(allJobs, datasetId);
-      var logs = [];
-      logs.push(
-        "Jobs total: " +
-          allJobs.length +
-          "; applicable to dataset '" +
-          (datasetId || getCurrentDatasetId() || "main") +
-          "': " +
-          applicable.length
-      );
-
-      for (var i = 0; i < applicable.length; i++) {
-        var job = applicable[i];
-        try {
-          var result = dm4ApplyEditorJobToDb5(db5, job, strict);
-          logs.push("[job " + (i + 1) + "] " + result.message);
-        } catch (e) {
-          logs.push("[job " + (i + 1) + " ERROR] " + (e && e.message ? e.message : String(e)));
-          if (strict) {
-            throw e;
-          }
-        }
-      }
-
-      return logs;
-    }
-
-// Export helper
-    function exportJobs(jobs) {
-      try {
-        var data = {
-          dataset_id: getCurrentDatasetId(),
-          generated_at: new Date().toISOString(),
-          jobs: jobs || []
-        };
-        var json = JSON.stringify(data, null, 2);
-        var blob = new Blob([json], { type: "application/json" });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
-        var ts = new Date();
-        var stamp =
-          ts.getFullYear().toString() +
-          String(ts.getMonth() + 1).padStart(2, "0") +
-          String(ts.getDate()).padStart(2, "0") +
-          "_" +
-          String(ts.getHours()).padStart(2, "0") +
-          String(ts.getMinutes()).padStart(2, "0");
-        a.href = url;
-        a.download = "DB5_EditorJobs_" + stamp + ".json";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(function () {
-          URL.revokeObjectURL(url);
-        }, 0);
-      } catch (e) {
-        DM4.Logger.error("[EDITOR] Failed to export jobs:", e);
-      }
     }
 
     // Reactive render

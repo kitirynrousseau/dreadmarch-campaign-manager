@@ -62,15 +62,241 @@
       };
     }
 
+    // Helper: Calculate grid from coordinates
+    function calculateGrid(coords, gridConfig) {
+      var cellSize = (gridConfig && gridConfig.cell_size) || [1500, 1500];
+      var colIndex = Math.floor(coords[0] / cellSize[0]);
+      var rowIndex = Math.floor(coords[1] / cellSize[1]);
+      var col = String.fromCharCode(65 + colIndex); // A=65
+      var row = rowIndex + 1;
+      return {
+        col: col,
+        row: row,
+        grid: col + "-" + row
+      };
+    }
+
+    // Apply: add_system
+    function dm4ApplyAddSystem(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var systemId = payload.system_id;
+      var coords = payload.coords;
+      var sector = payload.sector || "Unknown Sector";
+      var grid = payload.grid;
+
+      if (!systemId) {
+        var msg = "add_system job missing system_id";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      if (!coords || !Array.isArray(coords) || coords.length < 2) {
+        var coordsMsg = "add_system job missing or invalid coords for '" + systemId + "'";
+        if (strict) throw new Error(coordsMsg);
+        return { applied: false, message: coordsMsg };
+      }
+
+      var systems = db5.systems || {};
+      if (systems[systemId]) {
+        var existsMsg = "System '" + systemId + "' already exists in DB5; cannot add.";
+        if (strict) throw new Error(existsMsg);
+        return { applied: false, message: existsMsg };
+      }
+
+      // Auto-calculate grid if not provided
+      if (!grid || !grid.grid) {
+        var gridConfig = (db5.dataset_metadata && db5.dataset_metadata.galactic_grid) || null;
+        grid = calculateGrid(coords, gridConfig);
+      }
+
+      systems[systemId] = {
+        coords: coords,
+        grid: grid,
+        sector: sector,
+        routes: {
+          major: [],
+          medium: [],
+          minor_neighbors: []
+        },
+        labels: {},
+        editor_notes: payload.editor_notes || ""
+      };
+
+      return {
+        applied: true,
+        message: "Added system '" + systemId + "' at (" + coords[0] + ", " + coords[1] + ") in sector '" + sector + "'"
+      };
+    }
+
+    // Apply: delete_system  
+    function dm4ApplyDeleteSystem(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var systemId = payload.system_id;
+
+      if (!systemId) {
+        var msg = "delete_system job missing system_id";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var systems = db5.systems || {};
+      if (!systems[systemId]) {
+        var notFoundMsg = "System '" + systemId + "' not found in DB5; cannot delete.";
+        if (strict) throw new Error(notFoundMsg);
+        return { applied: false, message: notFoundMsg };
+      }
+
+      delete systems[systemId];
+
+      // Clean up hyperlane references
+      var hyperlanes = db5.hyperlanes || {};
+      Object.keys(hyperlanes).forEach(function (routeName) {
+        if (routeName === "minor_routes") {
+          var minorRoutes = hyperlanes.minor_routes || [];
+          hyperlanes.minor_routes = minorRoutes.filter(function (segment) {
+            return segment[0] !== systemId && segment[1] !== systemId;
+          });
+        } else {
+          var segments = hyperlanes[routeName] || [];
+          hyperlanes[routeName] = segments.filter(function (segment) {
+            return segment[0] !== systemId && segment[1] !== systemId;
+          });
+        }
+      });
+
+      // Update routes property on connected systems
+      Object.keys(systems).forEach(function (otherId) {
+        var otherSys = systems[otherId];
+        if (otherSys && otherSys.routes && otherSys.routes.minor_neighbors) {
+          otherSys.routes.minor_neighbors = otherSys.routes.minor_neighbors.filter(function (neighbor) {
+            return neighbor !== systemId;
+          });
+        }
+      });
+
+      return {
+        applied: true,
+        message: "Deleted system '" + systemId + "' and cleaned up route references"
+      };
+    }
+
+    // Apply: update_system
+    function dm4ApplyUpdateSystem(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var systemId = payload.system_id;
+      var changes = payload.changes || {};
+
+      if (!systemId) {
+        var msg = "update_system job missing system_id";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      var systems = db5.systems || {};
+      if (!systems[systemId]) {
+        var notFoundMsg = "System '" + systemId + "' not found in DB5; cannot update.";
+        if (strict) throw new Error(notFoundMsg);
+        return { applied: false, message: notFoundMsg };
+      }
+
+      var sys = systems[systemId];
+      var changesList = [];
+
+      if (changes.coords !== undefined) {
+        sys.coords = changes.coords;
+        changesList.push("coords -> [" + changes.coords[0] + ", " + changes.coords[1] + "]");
+        
+        // Recalculate grid if coords changed and grid not explicitly provided
+        if (changes.grid === undefined) {
+          var gridConfig = (db5.dataset_metadata && db5.dataset_metadata.galactic_grid) || null;
+          sys.grid = calculateGrid(changes.coords, gridConfig);
+          changesList.push("grid auto-calculated -> " + sys.grid.grid);
+        }
+      }
+
+      if (changes.grid !== undefined) {
+        sys.grid = changes.grid;
+        changesList.push("grid -> " + changes.grid.grid);
+      }
+
+      if (changes.editor_notes !== undefined) {
+        sys.editor_notes = changes.editor_notes;
+        changesList.push("editor_notes updated");
+      }
+
+      if (changes.labels !== undefined) {
+        sys.labels = Object.assign({}, sys.labels || {}, changes.labels);
+        changesList.push("labels updated");
+      }
+
+      return {
+        applied: true,
+        message: "Updated system '" + systemId + "': " + changesList.join(", ")
+      };
+    }
+
+    // Apply: move_system
+    function dm4ApplyMoveSystem(db5, job, strict) {
+      if (strict === undefined) strict = true;
+      var payload = job.payload || {};
+      var systemId = payload.system_id;
+      var newCoords = payload.new_coords;
+
+      if (!systemId) {
+        var msg = "move_system job missing system_id";
+        if (strict) throw new Error(msg);
+        return { applied: false, message: msg };
+      }
+
+      if (!newCoords || !Array.isArray(newCoords) || newCoords.length < 2) {
+        var coordsMsg = "move_system job missing or invalid new_coords";
+        if (strict) throw new Error(coordsMsg);
+        return { applied: false, message: coordsMsg };
+      }
+
+      var systems = db5.systems || {};
+      if (!systems[systemId]) {
+        var notFoundMsg = "System '" + systemId + "' not found in DB5; cannot move.";
+        if (strict) throw new Error(notFoundMsg);
+        return { applied: false, message: notFoundMsg };
+      }
+
+      var sys = systems[systemId];
+      var oldCoords = sys.coords;
+      sys.coords = newCoords;
+
+      // Recalculate grid
+      var gridConfig = (db5.dataset_metadata && db5.dataset_metadata.galactic_grid) || null;
+      sys.grid = calculateGrid(newCoords, gridConfig);
+
+      return {
+        applied: true,
+        message: "Moved system '" + systemId + "' from (" + oldCoords[0] + ", " + oldCoords[1] + ") to (" + newCoords[0] + ", " + newCoords[1] + "), grid -> " + sys.grid.grid
+      };
+    }
+
+
     function dm4ApplyEditorJobToDb5(db5, job, strict) {
       var opType = job.op_type || job.type;
       if (opType === "change_sector") {
         return dm4ApplyChangeSector(db5, job, strict);
       }
-      // Placeholder support for new operations - will be fully implemented
-      if (opType === "add_system" || opType === "delete_system" || opType === "update_system" || opType === "move_system") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      if (opType === "add_system") {
+        return dm4ApplyAddSystem(db5, job, strict);
       }
+      if (opType === "delete_system") {
+        return dm4ApplyDeleteSystem(db5, job, strict);
+      }
+      if (opType === "update_system") {
+        return dm4ApplyUpdateSystem(db5, job, strict);
+      }
+      if (opType === "move_system") {
+        return dm4ApplyMoveSystem(db5, job, strict);
+      }
+      // Placeholder support for remaining operations - will be fully implemented
       if (opType === "add_hyperlane_segment" || opType === "remove_hyperlane_segment" || opType === "create_route" || opType === "delete_route" || opType === "update_route_metadata" || opType === "add_minor_route" || opType === "remove_minor_route") {
         return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
       }
@@ -345,10 +571,19 @@ function EditorPanel(core) {
       if (opType === "change_sector") {
         return dm4ApplyChangeSector(db5, job, strict);
       }
-      // Placeholder support for new operations - will be fully implemented
-      if (opType === "add_system" || opType === "delete_system" || opType === "update_system" || opType === "move_system") {
-        return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
+      if (opType === "add_system") {
+        return dm4ApplyAddSystem(db5, job, strict);
       }
+      if (opType === "delete_system") {
+        return dm4ApplyDeleteSystem(db5, job, strict);
+      }
+      if (opType === "update_system") {
+        return dm4ApplyUpdateSystem(db5, job, strict);
+      }
+      if (opType === "move_system") {
+        return dm4ApplyMoveSystem(db5, job, strict);
+      }
+      // Placeholder support for remaining operations - will be fully implemented
       if (opType === "add_hyperlane_segment" || opType === "remove_hyperlane_segment" || opType === "create_route" || opType === "delete_route" || opType === "update_route_metadata" || opType === "add_minor_route" || opType === "remove_minor_route") {
         return { applied: false, message: "Operation '" + opType + "' registered but not yet implemented in apply function" };
       }

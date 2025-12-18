@@ -432,7 +432,7 @@
 }
 
 .dm4-editor-select {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(10, 5, 5, 0.9);
   border: 1px solid var(--dm-color-muted);
   color: var(--dm-color-body);
   padding: 2px 6px;
@@ -443,6 +443,17 @@
 .dm4-editor-select:focus {
   border-color: var(--dm-color-header);
   outline: none;
+}
+
+.dm4-editor-select option {
+  background: rgba(10, 5, 5, 0.95);
+  color: var(--dm-color-body);
+}
+
+.dm4-editor-select option:hover,
+.dm4-editor-select option:checked {
+  background: var(--selection-color);
+  color: #fff;
 }
 
 .dm4-editor-button {

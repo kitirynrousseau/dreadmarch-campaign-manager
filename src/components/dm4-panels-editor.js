@@ -287,6 +287,7 @@
       var routeName = payload.route_name;
       var fromSystem = payload.from_system;
       var toSystem = payload.to_system;
+      var insertIndex = payload.insert_index;
 
       if (!routeName || !fromSystem || !toSystem) {
         var msg = "add_hyperlane_segment job missing required fields";
@@ -322,7 +323,15 @@
         return { applied: false, message: "Segment " + fromSystem + " <-> " + toSystem + " already exists in route '" + routeName + "'" };
       }
 
-      hyperlanes[routeName].push([fromSystem, toSystem]);
+      var newSegment = [fromSystem, toSystem];
+      
+      // Insert at specified position
+      if (insertIndex !== undefined && insertIndex !== null && insertIndex >= 0) {
+        hyperlanes[routeName].splice(insertIndex, 0, newSegment);
+      } else {
+        // Default: add to end
+        hyperlanes[routeName].push(newSegment);
+      }
 
       // Update route_metadata if it doesn't exist
       var routeMeta = db5.route_metadata || {};
@@ -331,9 +340,14 @@
         db5.route_metadata = routeMeta;
       }
 
+      var positionMsg = "";
+      if (insertIndex !== undefined && insertIndex !== null && insertIndex >= 0) {
+        positionMsg = " at position " + insertIndex;
+      }
+
       return {
         applied: true,
-        message: "Added segment " + fromSystem + " <-> " + toSystem + " to route '" + routeName + "'"
+        message: "Added segment " + fromSystem + " <-> " + toSystem + " to route '" + routeName + "'" + positionMsg
       };
     }
 
@@ -1346,6 +1360,13 @@ function EditorPanel(core) {
         routeSelect.appendChild(opt);
       });
       
+      // Restore previously selected route from editor state
+      var editorState = st.editor || {};
+      var selectedRoute = editorState.selectedRoute || "";
+      if (selectedRoute && routeNames.indexOf(selectedRoute) >= 0) {
+        routeSelect.value = selectedRoute;
+      }
+      
       selectorRow.appendChild(routeSelect);
       
       // [+ New] button
@@ -1545,12 +1566,21 @@ function EditorPanel(core) {
       
       // Event handlers
       routeSelect.addEventListener("change", function() {
+        // Store selected route in state to preserve across re-renders
+        if (state.actions && typeof state.actions.setSelectedRoute === "function") {
+          state.actions.setSelectedRoute(routeSelect.value || null);
+        }
         renderRouteDetails(routeDetails, routeSelect.value, hyperlanes, routeMeta, systemIds, state);
       });
       
       newRouteBtn.addEventListener("click", function() {
         newRouteForm.style.display = newRouteForm.style.display === "none" ? "block" : "none";
       });
+      
+      // Render route details if there's a selected route
+      if (selectedRoute) {
+        renderRouteDetails(routeDetails, selectedRoute, hyperlanes, routeMeta, systemIds, state);
+      }
     }
 
     // Helper function to render route details
@@ -1637,6 +1667,35 @@ function EditorPanel(core) {
       addSegTitle.textContent = "Add Segment:";
       container.appendChild(addSegTitle);
       
+      // Position selector row
+      var positionRow = document.createElement("div");
+      positionRow.classList.add("dm4-editor-line", "dm-text-body");
+      positionRow.textContent = "Position: ";
+      
+      var positionSelect = document.createElement("select");
+      positionSelect.classList.add("dm4-editor-select");
+      
+      var endOpt = document.createElement("option");
+      endOpt.value = "end";
+      endOpt.textContent = "End";
+      positionSelect.appendChild(endOpt);
+      
+      var startOpt = document.createElement("option");
+      startOpt.value = "start";
+      startOpt.textContent = "Start";
+      positionSelect.appendChild(startOpt);
+      
+      // Add "After segment N" options
+      segments.forEach(function(seg, idx) {
+        var afterOpt = document.createElement("option");
+        afterOpt.value = "after-" + idx;
+        afterOpt.textContent = "After segment " + (idx + 1) + " (" + seg[0] + " ↔ " + seg[1] + ")";
+        positionSelect.appendChild(afterOpt);
+      });
+      
+      positionRow.appendChild(positionSelect);
+      container.appendChild(positionRow);
+      
       var addSegRow = document.createElement("div");
       addSegRow.classList.add("dm4-editor-line", "dm-text-body");
       
@@ -1678,10 +1737,25 @@ function EditorPanel(core) {
       addSegBtn.addEventListener("click", function() {
         if (fromSelect.value && toSelect.value && fromSelect.value !== toSelect.value) {
           var datasetId = getCurrentDatasetId();
+          var position = positionSelect.value;
+          var insertIndex = -1; // -1 means end
+          
+          if (position === "start") {
+            insertIndex = 0;
+          } else if (position.indexOf("after-") === 0) {
+            var afterIdx = parseInt(position.substring(6), 10);
+            insertIndex = afterIdx + 1;
+          }
+          
           state.actions.addEditorJob({
             target_dataset: datasetId,
             op_type: "add_hyperlane_segment",
-            payload: { route_name: routeName, from_system: fromSelect.value, to_system: toSelect.value },
+            payload: { 
+              route_name: routeName, 
+              from_system: fromSelect.value, 
+              to_system: toSelect.value,
+              insert_index: insertIndex
+            },
             created_at: new Date().toISOString()
           });
         }
@@ -1696,6 +1770,14 @@ function EditorPanel(core) {
       mapModeCheck.type = "checkbox";
       mapModeCheck.classList.add("dm4-editor-checkbox");
       mapModeCheck.id = "add-segment-map-mode";
+      
+      // Check if map mode is active for this route
+      var editorState = state.getState ? state.getState().editor : {};
+      var isMapModeActive = editorState.mode === "add_segment" && 
+                           editorState.pendingData && 
+                           editorState.pendingData.route_name === routeName;
+      mapModeCheck.checked = isMapModeActive;
+      
       var mapModeLabel = document.createElement("label");
       mapModeLabel.htmlFor = "add-segment-map-mode";
       mapModeLabel.textContent = " Click on map to select systems";
@@ -2011,6 +2093,81 @@ function EditorPanel(core) {
             typeof state.actions.clearEditorJobs === "function"
           ) {
             state.actions.clearEditorJobs();
+          }
+        });
+
+        var applyBtn = document.createElement("button");
+        applyBtn.type = "button";
+        applyBtn.textContent = "Apply Changes";
+        applyBtn.classList.add("dm4-editor-button", "dm4-editor-build-btn");
+        controls.appendChild(applyBtn);
+
+        applyBtn.addEventListener("click", function () {
+          var st = state.getState ? state.getState() : null;
+          if (!st || !st.editor) {
+            alert("No editor state available to apply changes.");
+            return;
+          }
+          var editorState = st.editor || { jobs: [] };
+          var jobs = editorState.jobs || [];
+          if (!jobs.length) {
+            alert("No pending editor jobs to apply.");
+            return;
+          }
+
+          var datasetId = getCurrentDatasetId();
+          var currentDb5 = st.dataset || {};
+          // Clone dataset so we don't mutate state directly if patch fails
+          var db5;
+          try {
+            db5 = JSON.parse(JSON.stringify(currentDb5));
+          } catch (e) {
+            DM4.Logger.error("[EDITOR] Failed to clone dataset for patch:", e);
+            alert("Failed to clone dataset for patch. See console for details.");
+            return;
+          }
+
+          var logs;
+          try {
+            logs = dm4ApplyJobsToDb5(db5, jobs, datasetId, true);
+          } catch (e) {
+            DM4.Logger.error("[EDITOR] Patch failed:", e);
+            alert("Patch failed: " + (e && e.message ? e.message : String(e)));
+            return;
+          }
+
+          // Apply patched dataset to viewer state
+          if (state.actions && typeof state.actions.setDataset === "function") {
+            state.actions.setDataset(db5);
+          }
+
+          // Also update in-memory DM4_DATASETS cache for this session if present
+          try {
+            if (
+              typeof window !== "undefined" &&
+              window.DM4_DATASETS &&
+              window.DM4_DATASETS[datasetId]
+            ) {
+              window.DM4_DATASETS[datasetId] = db5;
+            }
+          } catch (e) {
+            DM4.Logger.warn("[EDITOR] Failed to update DM4_DATASETS cache:", e);
+          }
+
+          // Clear editor jobs after successful patch
+          if (
+            state.actions &&
+            typeof state.actions.clearEditorJobs === "function"
+          ) {
+            state.actions.clearEditorJobs();
+          }
+
+          if (logs && logs.length) {
+            DM4.Logger.log("[EDITOR] Changes applied. Summary:");
+            for (var i = 0; i < logs.length; i++) {
+              DM4.Logger.log("  " + logs[i]);
+            }
+            alert("Changes applied successfully! Check console for details.");
           }
         });
 

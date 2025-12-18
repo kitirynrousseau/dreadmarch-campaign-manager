@@ -99,7 +99,8 @@
         enabled: false,
         jobs: [],
         mode: null,
-        pendingData: null
+        pendingData: null,
+        selectedRoute: null
       }
     };
 
@@ -445,6 +446,21 @@
         const current = state.editor || { enabled: false, jobs: [], mode: null, pendingData: null };
         state = Object.assign({}, state, {
           editor: Object.assign({}, current, { mode: null, pendingData: null })
+        });
+        batchNotify(['editor']);
+      },
+
+      /**
+       * setSelectedRoute - Sets the currently selected route in the editor
+       * 
+       * Used by the routes tab to preserve route selection across re-renders.
+       * 
+       * @param {string|null} routeName - Name of the route to select, or null to deselect
+       */
+      setSelectedRoute: function (routeName) {
+        const current = state.editor || { enabled: false, jobs: [], mode: null, pendingData: null, selectedRoute: null };
+        state = Object.assign({}, state, {
+          editor: Object.assign({}, current, { selectedRoute: routeName })
         });
         batchNotify(['editor']);
       }

@@ -323,3 +323,86 @@
   transform-origin: left center;
 }
 
+/* ------------------------------------------------------------------
+ * EDITOR PANEL STYLES
+ * ------------------------------------------------------------------*/
+
+/* Editor tabs */
+.dm4-editor-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--dm-color-muted);
+  padding-bottom: 0.25rem;
+}
+
+.dm4-editor-tab {
+  padding: 4px 8px;
+  font-size: var(--dm-font-small);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--dm-color-muted);
+  cursor: pointer;
+}
+
+.dm4-editor-tab:hover {
+  color: var(--dm-color-body);
+}
+
+.dm4-editor-tab.active {
+  color: var(--dm-color-header);
+  border-color: var(--dm-color-header);
+  border-bottom-color: transparent;
+}
+
+.dm4-editor-tab-content {
+  min-height: 150px;
+}
+
+/* Editor form inputs */
+.dm4-editor-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--dm-color-muted);
+  color: var(--dm-color-body);
+  padding: 2px 6px;
+  font-size: var(--dm-font-small);
+  margin-right: 4px;
+}
+
+.dm4-editor-input:focus {
+  border-color: var(--dm-color-header);
+  outline: none;
+}
+
+.dm4-editor-textarea {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+}
+
+.dm4-editor-checkbox {
+  margin-right: 6px;
+}
+
+.dm4-editor-delete-btn {
+  background: rgba(180, 60, 60, 0.3);
+  border-color: #b44;
+  color: #f88;
+}
+
+.dm4-editor-delete-btn:hover {
+  background: rgba(180, 60, 60, 0.5);
+}
+
+/* Editor mode indicator */
+.dm4-editor-mode-active {
+  background: rgba(228, 107, 36, 0.2);
+  border: 1px solid var(--selection-color);
+  padding: 4px 8px;
+  margin-bottom: 0.5rem;
+  font-size: var(--dm-font-small);
+  text-transform: uppercase;
+}
+
